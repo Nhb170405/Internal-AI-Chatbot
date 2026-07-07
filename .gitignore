@@ -1,0 +1,34 @@
+# Build output
+**/bin/
+**/obj/
+dist/
+build/
+node_modules/
+*.tsbuildinfo
+.tmpout/
+
+# Secrets
+.env
+.env.*
+**/.env
+**/.env.*
+!.env.example
+!**/.env.example
+
+# IDE
+.vs/
+.vscode/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Runtime storage
+storage/*
+!storage/.gitkeep
+**/storage/*
+!**/storage/.gitkeep
+generated/
+**/generated/
