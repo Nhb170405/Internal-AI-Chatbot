@@ -108,4 +108,47 @@ public sealed class PythonVectorClient
 
         return result;
     }
+
+    public async Task<PythonVectorDeleteResponse> DeleteDocumentVectorsAsync(Guid documentId, CancellationToken cancellationToken = default)
+    {
+        // Xoa vector theo documentId trong Qdrant.
+        // Ham nay chi gui documentId, khong gui noi dung chunk de tranh log/leak du lieu noi bo.
+        if (string.IsNullOrWhiteSpace(_options.BaseUrl))
+        {
+            throw new InvalidOperationException("Missing PythonService:BaseUrl configuration.");
+        }
+
+        _httpClient.BaseAddress = new Uri(_options.BaseUrl);
+
+        if (_options.TimeoutSeconds <= 0)
+        {
+            throw new InvalidOperationException("PythonService:TimeoutSeconds must be greater than 0.");
+        }
+
+        _httpClient.Timeout = TimeSpan.FromSeconds(_options.TimeoutSeconds);
+
+        var request = new PythonVectorDeleteRequest
+        {
+            DocumentId = documentId
+        };
+
+        var response = await _httpClient.PostAsJsonAsync("/delete-document-vectors", request, JsonOptions, cancellationToken);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            var errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
+
+            throw new InvalidOperationException(
+                $"Python delete-document-vectors service returned {(int)response.StatusCode}: {errorBody}");
+        }
+
+        var result = await response.Content.ReadFromJsonAsync<PythonVectorDeleteResponse>(JsonOptions, cancellationToken);
+
+        if (result is null)
+        {
+            throw new InvalidOperationException("Python delete-document-vectors service returned empty response.");
+        }
+
+        return result;
+    }
 }

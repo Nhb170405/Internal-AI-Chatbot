@@ -34,7 +34,10 @@ Tac dong toi Milestone 7/8:
 Tac dong toi Milestone 15:
 - Can DeletedDocumentPurgeJob.
 - Job purge file vat ly sau retention.
-- Sau nay purge/inactive DocumentChunks va Qdrant vectors.
+- Job purge se xoa Qdrant vectors theo `documentId` truoc khi xoa file vat ly va SQL rows.
+- Job purge se xoa cac du lieu phu thuoc trong SQL: job logs, processing jobs, table profiles, chunks, extractions, metadata.
+- Neu Qdrant/file storage loi thi giu SQL row de lan sau retry duoc, tranh mat dau vet document.
+- Audit log purge la best-effort: neu purge da thanh cong ma audit loi thi chi ghi warning, khong lam job fail gia.
 
 Tac dong toi Milestone 16:
 - Retention policy can cau hinh ro rang.
@@ -61,3 +64,4 @@ Cau hoi de xu ly sau:
 - Co can field PreviousStatus truoc khi delete khong?
 - Sau purge co giu metadata document trong SQL khong?
 - Co can them `PurgedAt`, `PurgedByUserId`, `PurgeReason` de audit khong?
+- Co can API manual purge cho admin/employee theo scope khong, ngoai scheduled purge job?

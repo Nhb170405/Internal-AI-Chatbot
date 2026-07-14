@@ -122,6 +122,8 @@ public sealed class AppDbContext : DbContext
             entity.Property(e => e.OriginalFileName).IsRequired().HasMaxLength(500);
             entity.Property(e => e.StoredFileName).IsRequired().HasMaxLength(500);
             entity.Property(e => e.StoragePath).IsRequired().HasMaxLength(1000);
+            entity.Property(e => e.StorageProvider).IsRequired().HasMaxLength(50).HasDefaultValue("local");
+            entity.Property(e => e.StorageKey).IsRequired().HasMaxLength(1000).HasDefaultValue("");
             entity.Property(e => e.ContentType).IsRequired().HasMaxLength(255);
             entity.Property(e => e.Extension).IsRequired().HasMaxLength(20);
             entity.Property(e => e.SizeBytes).IsRequired();

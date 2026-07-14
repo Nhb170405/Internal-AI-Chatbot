@@ -8,6 +8,10 @@ public sealed class PythonDatasetAnalysisRequest
 
     public string FileName { get; set; } = string.Empty;
 
+    public string FileReferenceType { get; set; } = "local_path";
+
+    public string FileReferenceValue { get; set; } = string.Empty;
+
     public string Extension { get; set; } = string.Empty;
 
     public string Operation { get; set; } = string.Empty;

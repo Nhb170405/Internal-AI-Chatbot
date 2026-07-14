@@ -10,7 +10,21 @@ public sealed class Document
     // Ten file an toan do backend tu tao, vi du: {documentId}.pdf.
     public string StoredFileName { get; set; } = string.Empty;
 
+
+
+
+    // Noi file duoc luu: local, azure_blob, ...
+    public string StorageProvider { get; set; } = "local";
+
+    // Dinh danh on dinh cua file trong storage.
+    // Local: stored file name.
+    // Azure Blob: blob name.
+    public string StorageKey { get; set; } = string.Empty;
+
     // Duong dan noi bo de backend tim file. Khong nen expose tuy tien ra frontend.
+
+
+
     public string StoragePath { get; set; } = string.Empty;
 
     public string ContentType { get; set; } = string.Empty;

@@ -26,6 +26,7 @@ using backend_dotnet.Infrastructure.Security;
 using System.Security.Claims;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.AspNetCore.HttpOverrides;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -72,7 +73,19 @@ builder.Services.AddScoped<DeletedDocumentPurgeJobHandler>();
 builder.Services.AddScoped<PromptBuilder>();
 builder.Services.AddScoped<RagService>();
 builder.Services.AddScoped<LocalFileStorageService>();
+builder.Services.AddScoped<AzureBlobFileStorageService>();
+builder.Services.AddScoped<IFileStorageService>(serviceProvider =>
+{
+    var configuration = serviceProvider.GetRequiredService<IConfiguration>();
+    var provider = configuration.GetValue<string>("FileStorage:Provider")?.Trim().ToLowerInvariant();
 
+    return provider switch
+    {
+        FileStorageProvider.Local => serviceProvider.GetRequiredService<LocalFileStorageService>(),
+        FileStorageProvider.AzureBlob => serviceProvider.GetRequiredService<AzureBlobFileStorageService>(),
+        _ => throw new InvalidOperationException("Unsupported file storage provider.")
+    };
+});
 builder.Services.AddScoped<IPasswordHasher<AppUser>, PasswordHasher<AppUser>>();
 
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme).AddCookie(option =>
@@ -82,17 +95,19 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
     option.AccessDeniedPath = "/api/auth/access-denied";
     option.Cookie.HttpOnly = true;
     option.Cookie.Name = "internal_chatbot_auth";
-    option.Cookie.SameSite = SameSiteMode.Lax;
     option.ExpireTimeSpan = TimeSpan.FromHours(8);
     option.SlidingExpiration = true;
     if (builder.Environment.IsDevelopment())
     {
+        option.Cookie.SameSite = SameSiteMode.Lax;
         option.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
     }
     else
     {
+        option.Cookie.SameSite = SameSiteMode.None;
         option.Cookie.SecurePolicy = CookieSecurePolicy.Always;
     }
+
     option.Events = new CookieAuthenticationEvents
     {
         OnRedirectToLogin = context =>
@@ -109,12 +124,22 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
 });
 builder.Services.AddAuthorization();
 
+
+var allowedOrigins = builder.Configuration
+    .GetSection("Cors:AllowedOrigins")
+    .Get<string[]>() ?? [];
+
+if (allowedOrigins is null || allowedOrigins.Length == 0)
+{
+    throw new InvalidOperationException("Missing Cors:AllowedOrigins configuration.");
+}
+
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("FrontendDev", policy =>
+    options.AddPolicy("FrontendCors", policy =>
     {
         policy
-            .WithOrigins("http://localhost:5173")
+            .WithOrigins(allowedOrigins)
             .AllowAnyHeader()
             .AllowAnyMethod()
             .AllowCredentials();
@@ -148,6 +173,12 @@ builder.Services.AddHangfireServer();
 
 builder.Services.Configure<LocalFileStorageOptions>(
     builder.Configuration.GetSection("LocalFileStorage"));
+
+builder.Services.Configure<FileStorageOptions>(
+builder.Configuration.GetSection("FileStorage"));
+
+builder.Services.Configure<AzureBlobStorageOptions>(
+    builder.Configuration.GetSection("AzureBlobStorage"));
 
 builder.Services.Configure<DocumentRetentionOptions>(
     builder.Configuration.GetSection("DocumentRetention"));
@@ -237,10 +268,28 @@ builder.Services.AddRateLimiter(options =>
             }));
 });
 
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders =
+        ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
+});
+
 var app = builder.Build();
+
+app.UseForwardedHeaders();
 
 app.UseMiddleware<SecurityHeadersMiddleware>();
 app.UseMiddleware<GlobalExceptionMiddleware>();
+
+if (app.Configuration.GetValue<bool>("Database:AutoMigrate"))
+{
+    using var scope = app.Services.CreateScope();
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    await db.Database.MigrateAsync();
+}
 
 if (app.Environment.IsDevelopment())
 {
@@ -258,11 +307,24 @@ if (app.Environment.IsDevelopment())
     app.UseHangfireDashboard("/hangfire");
 }
 
+// Job dinh ky: xoa cung document da soft delete qua retention period.
+// Logic purge nam trong DeletedDocumentPurgeJobHandler de de test/debug va khong lam Program.cs bi phinh to.
+using (var scope = app.Services.CreateScope())
+{
+    var recurringJobManager = scope.ServiceProvider
+        .GetRequiredService<IRecurringJobManager>();
+
+    recurringJobManager.AddOrUpdate<DeletedDocumentPurgeJobHandler>(
+        "deleted-document-purge",
+        handler => handler.PurgeExpiredDeletedDocumentsAsync(),
+        Cron.Daily);
+}
+
 app.UseHttpsRedirection();
 
 // Middleware
 app.UseRouting();
-app.UseCors("FrontendDev");
+app.UseCors("FrontendCors");
 app.UseAuthentication();
 app.UseRateLimiter();
 app.UseAuthorization();

@@ -11,7 +11,10 @@ class QdrantService:
         # 2. Tao QdrantClient(url=settings.qdrant_url).
         
         self._settings = settings
-        self._client = QdrantClient(url=settings.qdrant_url)
+        self._client = QdrantClient(
+            url=settings.qdrant_url,
+            api_key=settings.qdrant_api_key or None,
+        )
 
     def ensure_collection(self, vector_size: int) -> None:
         exists = self._client.collection_exists(
@@ -30,6 +33,7 @@ class QdrantService:
                     f"Collection vector size mismatch. Existing={existing_size}, expected={vector_size}."
                 )
 
+            self.ensure_payload_indexes()
             return
 
         self._client.create_collection(
@@ -39,6 +43,8 @@ class QdrantService:
                 distance=models.Distance.COSINE,
             ),
         )
+        
+        self.ensure_payload_indexes()
 
     def upsert_points(self, points: list[VectorPointInput]) -> None:
         # Bai tap Milestone 7:
@@ -109,3 +115,65 @@ class QdrantService:
             )
             for point in result.points
         ]
+
+    def delete_by_document_id(self, document_id: str) -> int:
+        # Xoa tat ca points co payload documentId = document_id.
+        # Return deleted_count uoc tinh bang count truoc khi delete.
+        # Neu document chua tung index thi deleted_count = 0 va van xem la thanh cong.
+        cleaned_document_id = document_id.strip()
+
+        if not cleaned_document_id:
+            raise ValueError("Document id is empty.")
+
+        exists = self._client.collection_exists(
+            collection_name=self._settings.qdrant_collection
+        )
+
+        if not exists:
+            return 0
+
+        self.ensure_payload_indexes()
+
+        query_filter = models.Filter(
+            must=[
+                models.FieldCondition(
+                    key="documentId",
+                    match=models.MatchValue(value=cleaned_document_id),
+                )
+            ]
+        )
+
+        count_result = self._client.count(
+            collection_name=self._settings.qdrant_collection,
+            count_filter=query_filter,
+            exact=True,
+        )
+
+        self._client.delete(
+            collection_name=self._settings.qdrant_collection,
+            points_selector=models.FilterSelector(filter=query_filter),
+            wait=True,
+        )
+
+        return count_result.count
+        
+    def ensure_payload_indexes(self) -> None:
+        collection_info = self._client.get_collection(
+            collection_name=self._settings.qdrant_collection
+        )
+
+        payload_schema = collection_info.payload_schema or {}
+
+        if "accessLevel" not in payload_schema:
+            self._client.create_payload_index(
+                collection_name=self._settings.qdrant_collection,
+                field_name="accessLevel",
+                field_schema=models.PayloadSchemaType.KEYWORD,
+            )
+
+        if "documentId" not in payload_schema:
+            self._client.create_payload_index(
+                collection_name=self._settings.qdrant_collection,
+                field_name="documentId",
+                field_schema=models.PayloadSchemaType.KEYWORD,
+            )

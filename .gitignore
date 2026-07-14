@@ -26,9 +26,9 @@ __pycache__/
 venv/
 
 # Runtime storage
-storage/*
-!storage/.gitkeep
-**/storage/*
-!**/storage/.gitkeep
+storage/uploads/*
+!storage/uploads/.gitkeep
+backend-dotnet/storage/uploads/*
+!backend-dotnet/storage/uploads/.gitkeep
 generated/
 **/generated/

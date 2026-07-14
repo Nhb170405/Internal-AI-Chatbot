@@ -9,6 +9,8 @@ class DatasetProfileRequest(BaseModel):
     documentId: str
     filePath: str
     fileName: str
+    fileReferenceType: str = "local_path"
+    fileReferenceValue: str = ""
     extension: str
 
 

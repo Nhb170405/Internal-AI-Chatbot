@@ -8,6 +8,7 @@ using backend_dotnet.Infrastructure.Python;
 using backend_dotnet.Modules.Audit;
 using backend_dotnet.Modules.Users;
 using Microsoft.EntityFrameworkCore;
+using backend_dotnet.Infrastructure.Storage;
 
 namespace backend_dotnet.Modules.Documents;
 
@@ -17,17 +18,20 @@ public sealed class DocumentIngestionService
     private readonly PythonIngestionClient _pythonIngestionClient;
     private readonly AuditLogService _auditLogService;
     private readonly IHttpContextAccessor _httpContextAccessor;
+    private readonly IFileStorageService _fileStorageService;
 
     public DocumentIngestionService(
         AppDbContext db,
         PythonIngestionClient pythonIngestionClient,
         AuditLogService auditLogService,
-        IHttpContextAccessor httpContextAccessor)
+        IHttpContextAccessor httpContextAccessor,
+        IFileStorageService fileStorageService)
     {
         _db = db;
         _pythonIngestionClient = pythonIngestionClient;
         _auditLogService = auditLogService;
         _httpContextAccessor = httpContextAccessor;
+        _fileStorageService = fileStorageService;
     }
 
     public async Task<DocumentIngestResponse> IngestAsync(Guid documentId, CancellationToken cancellationToken = default)
@@ -153,10 +157,18 @@ public sealed class DocumentIngestionService
 
         await _db.SaveChangesAsync(cancellationToken);
 
+        var readReference = await _fileStorageService.GetReadReferenceAsync(document, cancellationToken);
+
         var pythonRequest = new PythonIngestRequest
         {
             DocumentId = document.Id,
-            FilePath = document.StoragePath,
+
+            // Legacy field de Python cu van doc duoc trong local mode.
+            FilePath = readReference.Value,
+
+            FileReferenceType = readReference.ReferenceType,
+            FileReferenceValue = readReference.Value,
+
             FileName = document.OriginalFileName,
             ContentType = document.ContentType,
             Extension = document.Extension

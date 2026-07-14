@@ -7,7 +7,7 @@ import { useAuth } from "./useAuth";
 export function LoginPage() {
   const navigate = useNavigate();
   const { loginWithPassword, loginAsGuest } = useAuth();
-  const [email, setEmail] = useState("admin@factory.local");
+  const [email, setEmail] = useState("admin@company.com");
   const [password, setPassword] = useState("Admin@123");
   const [guestName, setGuestName] = useState("Guest");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -21,8 +21,8 @@ export function LoginPage() {
     try {
       await loginWithPassword({ email, password });
       navigate("/chat");
-    } catch {
-      setErrorMessage("Đăng nhập thất bại. Kiểm tra email hoặc mật khẩu.");
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Đăng nhập thất bại. Kiểm tra email hoặc mật khẩu.");
     } finally {
       setIsSubmitting(false);
     }
@@ -35,8 +35,8 @@ export function LoginPage() {
     try {
       await loginAsGuest({ displayName: guestName });
       navigate("/chat");
-    } catch {
-      setErrorMessage("Không thể tạo phiên guest.");
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Không thể tạo phiên guest.");
     } finally {
       setIsSubmitting(false);
     }
