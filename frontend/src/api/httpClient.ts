@@ -14,14 +14,27 @@ type RequestOptions = {
   formData?: FormData;
 };
 
-export async function apiRequest<TResponse>(path: string, options: RequestOptions = {}): Promise<TResponse> {
+export class ApiRequestError extends Error {
+  status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "ApiRequestError";
+    this.status = status;
+  }
+}
+
+export async function apiRequest<TResponse>(
+  path: string,
+  options: RequestOptions = {}
+): Promise<TResponse> {
   const headers = new Headers();
 
   if (!options.formData) {
     headers.set("Content-Type", "application/json");
   }
 
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+  const response = await fetch(buildApiUrl(path), {
     method: options.method ?? "GET",
     headers,
     credentials: "include",
@@ -30,7 +43,10 @@ export async function apiRequest<TResponse>(path: string, options: RequestOption
 
   if (!response.ok) {
     const message = await readErrorMessage(response);
-    throw new Error(message ?? `API request failed with status ${response.status}`);
+    throw new ApiRequestError(
+      message ?? getDefaultErrorMessage(response.status),
+      response.status
+    );
   }
 
   if (response.status === 204) {
@@ -40,11 +56,44 @@ export async function apiRequest<TResponse>(path: string, options: RequestOption
   return (await response.json()) as TResponse;
 }
 
+function getDefaultErrorMessage(status: number) {
+  if (status === 400) {
+    return "Dữ liệu gửi lên không hợp lệ. Vui lòng kiểm tra lại.";
+  }
+
+  if (status === 401) {
+    return "Đăng nhập thất bại. Vui lòng kiểm tra lại email hoặc mật khẩu.";
+  }
+
+  if (status === 403) {
+    return "Bạn không có quyền thực hiện thao tác này.";
+  }
+
+  if (status === 404) {
+    return "Không tìm thấy dữ liệu yêu cầu.";
+  }
+
+  if (status === 429) {
+    return "Bạn thao tác quá nhanh. Vui lòng thử lại sau.";
+  }
+
+  if (status >= 500) {
+    return "Máy chủ đang gặp lỗi. Vui lòng thử lại sau.";
+  }
+
+  return `Yêu cầu thất bại với mã lỗi ${status}.`;
+}
+
 async function readErrorMessage(response: Response) {
   const contentType = response.headers.get("content-type") ?? "";
 
   if (contentType.includes("application/json")) {
-    const body = (await response.json().catch(() => null)) as { message?: string; errorMessage?: string; title?: string } | null;
+    const body = (await response.json().catch(() => null)) as {
+      message?: string;
+      errorMessage?: string;
+      title?: string;
+    } | null;
+
     return body?.message ?? body?.errorMessage ?? body?.title ?? null;
   }
 

@@ -9,6 +9,7 @@ using Microsoft.EntityFrameworkCore;
 using backend_dotnet.Contracts.Python;
 using backend_dotnet.Infrastructure.Errors;
 using System.Text.Json;
+using backend_dotnet.Infrastructure.Storage;
 
 namespace backend_dotnet.Modules.Datasets;
 
@@ -18,17 +19,20 @@ public sealed class DatasetProfileService
     private readonly PythonDatasetClient _pythonDatasetClient;
     private readonly AuditLogService _auditLogService;
     private readonly IHttpContextAccessor _httpContextAccessor;
+    private readonly IFileStorageService _fileStorageService;
 
     public DatasetProfileService(
         AppDbContext db,
         PythonDatasetClient pythonDatasetClient,
         AuditLogService auditLogService,
-        IHttpContextAccessor httpContextAccessor)
+        IHttpContextAccessor httpContextAccessor,
+        IFileStorageService fileStorageService)
     {
         _db = db;
         _pythonDatasetClient = pythonDatasetClient;
         _auditLogService = auditLogService;
         _httpContextAccessor = httpContextAccessor;
+        _fileStorageService = fileStorageService;
     }
 
     public async Task<DatasetProfileResponse> ProfileAsync(Guid documentId, CancellationToken cancellationToken = default)
@@ -197,10 +201,18 @@ public sealed class DatasetProfileService
 
         IsDatasetExtension(document.Extension);
 
+        var readReference = await _fileStorageService.GetReadReferenceAsync(document, cancellationToken);
+
         var pythonRequest = new PythonDatasetProfileRequest
         {
             DocumentId = document.Id.ToString(),
-            FilePath = document.StoragePath,
+
+            // Legacy field de Python cu/local mode van doc duoc.
+            FilePath = readReference.Value,
+
+            FileReferenceType = readReference.ReferenceType,
+            FileReferenceValue = readReference.Value,
+
             FileName = document.OriginalFileName,
             Extension = document.Extension
         };

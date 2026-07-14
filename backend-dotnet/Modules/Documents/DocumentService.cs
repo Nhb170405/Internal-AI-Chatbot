@@ -13,7 +13,7 @@ namespace backend_dotnet.Modules.Documents;
 public sealed class DocumentService
 {
     private readonly AppDbContext _db;
-    private readonly LocalFileStorageService _storage;
+    private readonly IFileStorageService _storage;
     private readonly AuditLogService _auditLogService;
     private readonly DocumentMetadataService _documentMetadataService;
     private readonly IHttpContextAccessor _httpContextAccessor;
@@ -21,7 +21,7 @@ public sealed class DocumentService
 
     public DocumentService(
         AppDbContext db,
-        LocalFileStorageService storage,
+        IFileStorageService storage,
         AuditLogService auditLogService,
         DocumentMetadataService documentMetadataService,
         IHttpContextAccessor httpContextAccessor,
@@ -53,10 +53,11 @@ public sealed class DocumentService
         //    - guest: tam thoi can quyet dinh co cho upload khong. Goi y Milestone 4: chi employee/admin upload.
         // 5. Tao documentId = Guid.NewGuid().
         // 6. Goi _storage.SaveAsync(file, documentId, extension, cancellationToken).
+        //    - Ham nay tra ve StoredFileResult, gom StoredFileName/StoragePath/StorageKey.
         // 7. Tao Document entity:
         //    - OriginalFileName = Path.GetFileName(file.FileName).
-        //    - StoredFileName = documentId + extension.
-        //    - StoragePath = path tra ve tu storage.
+        //    - StoredFileName = storedFile.StoredFileName.
+        //    - StoragePath = storedFile.StoragePath trong giai doan local/backward-compatible.
         //    - ContentType = file.ContentType hoac "application/octet-stream" neu rong.
         //    - Extension, SizeBytes, Status = DocumentStatus.Uploaded.
         //    - CreatedAt/UpdatedAt = DateTimeOffset.UtcNow.
@@ -92,15 +93,17 @@ public sealed class DocumentService
             ? "application/octet-stream"
             : file.ContentType;
         var now = DateTimeOffset.UtcNow;
-        var storagePath = await _storage.SaveAsync(file, documentId, extension, cancellationToken);
+        var storedFile = await _storage.SaveAsync(file, documentId, extension, cancellationToken);
 
         var document = new Document
         {
             Id = documentId,
             UploadedByUserId = userId,
             OriginalFileName = originalFileName,
-            StoredFileName = documentId + extension,
-            StoragePath = storagePath,
+            StoredFileName = storedFile.StoredFileName,
+            StoragePath = storedFile.StoragePath,
+            StorageProvider = storedFile.StorageProvider,
+            StorageKey = storedFile.StorageKey,
             ContentType = contentType,
             Extension = extension,
             SizeBytes = file.Length,

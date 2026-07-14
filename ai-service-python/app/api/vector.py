@@ -1,7 +1,11 @@
+import logging
+
 from fastapi import APIRouter
 
 from app.config.settings import get_settings
 from app.embedding.embedding_service import EmbeddingService
+from app.models.vector_delete_request import VectorDeleteRequest
+from app.models.vector_delete_response import VectorDeleteResponse
 from app.models.vector_index_request import VectorIndexRequest
 from app.models.vector_index_response import VectorIndexResponse
 from app.models.vector_search_request import VectorSearchRequest
@@ -11,6 +15,7 @@ from app.vector.vector_models import VectorPointInput
 
 
 router = APIRouter(tags=["Vector"])
+logger = logging.getLogger(__name__)
 
 
 @router.post("/index-document", response_model=VectorIndexResponse)
@@ -112,6 +117,8 @@ def index_document(request: VectorIndexRequest) -> VectorIndexResponse:
         )
 
     except Exception:
+        logger.exception("Vector indexing failed for document_id=%s", request.document_id)
+
         return VectorIndexResponse(
             documentId=request.document_id,
             success=False,
@@ -189,8 +196,51 @@ def search_documents(request: VectorSearchRequest) -> VectorSearchResponse:
         )
 
     except Exception:
+        logger.exception("Vector search failed")
+
         return VectorSearchResponse(
             success=False,
             hits=[],
             errorMessage="Vector search failed.",
+        )
+
+
+@router.post("/delete-document-vectors", response_model=VectorDeleteResponse)
+def delete_document_vectors(request: VectorDeleteRequest) -> VectorDeleteResponse:
+    # Xoa tat ca vector/chunk trong Qdrant theo documentId.
+    # Endpoint nay duoc goi tu ASP.NET Core khi purge document da soft delete qua retention.
+    collection_name = "internal_documents"
+
+    try:
+        settings = get_settings()
+        qdrant_service = QdrantService(settings)
+
+        deleted_count = qdrant_service.delete_by_document_id(request.document_id)
+
+        return VectorDeleteResponse(
+            documentId=request.document_id,
+            success=True,
+            collectionName=settings.qdrant_collection,
+            deletedCount=deleted_count,
+            errorMessage=None,
+        )
+
+    except ValueError as error:
+        return VectorDeleteResponse(
+            documentId=request.document_id,
+            success=False,
+            collectionName=collection_name,
+            deletedCount=0,
+            errorMessage=str(error),
+        )
+
+    except Exception:
+        logger.exception("Vector delete failed for document_id=%s", request.document_id)
+
+        return VectorDeleteResponse(
+            documentId=request.document_id,
+            success=False,
+            collectionName=collection_name,
+            deletedCount=0,
+            errorMessage="Vector delete failed.",
         )

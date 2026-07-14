@@ -10,7 +10,7 @@ class AppSettings:
     openai_embedding_model: str
     qdrant_url: str
     qdrant_collection: str
-
+    qdrant_api_key: str
 
 def get_settings() -> AppSettings:
     # Bai tap Milestone 7:
@@ -39,9 +39,15 @@ def get_settings() -> AppSettings:
     if not qdrant_collection:
         raise ValueError("Missing QDRANT_COLLECTION.")
     
+    qdrant_api_key = os.environ.get("QDRANT_API_KEY", "").strip()
+    if not qdrant_api_key:
+        raise ValueError("Missing QDRANT_API_KEY.")
+    
+    
     return AppSettings(
     openai_api_key=api_key,
     openai_embedding_model=model,
     qdrant_url=qdrant_url,
     qdrant_collection=qdrant_collection,
+    qdrant_api_key=qdrant_api_key
 )

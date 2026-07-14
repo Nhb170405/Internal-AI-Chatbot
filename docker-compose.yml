@@ -1,0 +1,106 @@
+services:
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: internal-chatbot-sqlserver
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD:?Set MSSQL_SA_PASSWORD in root .env}
+      MSSQL_PID: Developer
+    ports:
+      - "14333:1433"
+    volumes:
+      - sqlserver_data:/var/opt/mssql
+    restart: unless-stopped
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: internal-chatbot-qdrant
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    restart: unless-stopped
+
+  ai-service-python:
+    build:
+      context: ./ai-service-python
+      dockerfile: Dockerfile
+    container_name: internal-chatbot-python
+    ports:
+      - "8000:8000"
+    environment:
+      PYTHON_ENV: Development
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_EMBEDDING_MODEL: text-embedding-3-small
+      QDRANT_URL: http://qdrant:6333
+      QDRANT_API_KEY: ""
+      QDRANT_COLLECTION: ${QDRANT_COLLECTION:-internal_documents}
+      TESSERACT_LANG: vie+eng
+      TEMP_FILE_ROOT: /tmp/factory-chatbot
+      CHART_OUTPUT_DIR: /app/generated/charts
+    depends_on:
+      - qdrant
+    volumes:
+      - demo_uploads:/app/storage/uploads
+      - python_generated:/app/generated
+    restart: unless-stopped
+
+  backend-dotnet:
+    build:
+      context: ./backend-dotnet
+      dockerfile: Dockerfile
+    container_name: internal-chatbot-backend
+    ports:
+      - "5055:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://+:8080
+
+      Database__AutoMigrate: "true"
+
+      ConnectionStrings__DefaultConnection: Server=sqlserver,1433;Database=internal-ai-chatbot;User Id=sa;Password=${MSSQL_SA_PASSWORD};TrustServerCertificate=True;Encrypt=False;
+
+      OpenAI__ApiKey: ${OPENAI_API_KEY}
+      OpenAI__BaseUrl: https://api.openai.com/v1
+      OpenAI__ChatModel: gpt-4.1-mini
+      OpenAI__EmbeddingModel: text-embedding-3-small
+      OpenAI__SystemPrompt: You are an internal company assistant. Answer safely and concisely.
+
+      PythonService__BaseUrl: http://ai-service-python:8000
+      PythonService__TimeoutSeconds: 180
+
+      Qdrant__Url: http://qdrant:6333
+      Qdrant__ApiKey: ""
+      Qdrant__Collection: ${QDRANT_COLLECTION:-internal_documents}
+
+      FileStorage__Provider: local
+      LocalFileStorage__RootPath: /app/storage/uploads
+      ChartStorage__RootPath: /app/generated/charts
+    depends_on:
+      - sqlserver
+      - ai-service-python
+      - qdrant
+    volumes:
+      - demo_uploads:/app/storage/uploads
+      - python_generated:/app/generated
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: internal-chatbot-frontend
+    ports:
+      - "5173:5173"
+    environment:
+      VITE_API_BASE_URL: http://localhost:5055
+    depends_on:
+      - backend-dotnet
+    restart: unless-stopped
+
+volumes:
+  sqlserver_data:
+  qdrant_data:
+  demo_uploads:
+  python_generated:

@@ -1,10 +1,16 @@
 from app.datasets.dataset_models import DatasetColumnProfile, DatasetProfileRequest, DatasetProfileResponse
 import pandas as pd
-import os 
 
 from datetime import date, datetime
 import math
 import numpy as np
+
+from pathlib import Path
+
+from app.ingestion.file_reference_resolver import (
+    cleanup_resolved_file,
+    resolve_file_reference,
+)
 
 def profile_dataset(request: DatasetProfileRequest) -> DatasetProfileResponse:
     # Bai tap Milestone 11:
@@ -33,41 +39,94 @@ def profile_dataset(request: DatasetProfileRequest) -> DatasetProfileResponse:
     # df = pd.read_csv(request.filePath)
     # df.shape -> (row_count, column_count)
     # df.dtypes -> kieu du lieu pandas
-    try: 
-        if request.filePath is None or request.filePath == "":
-            return DatasetProfileResponse(documentId=request.documentId, success=False, profiles=[], warnings=[], errorMessage="filePath is required")
+    extension = request.extension.lower().strip()
+
+    try:
+        resolved = resolve_file_reference(
+            file_reference_type=request.fileReferenceType,
+            file_reference_value=request.fileReferenceValue,
+            legacy_file_path=request.filePath,
+            extension=request.extension,
+        )
+    except ValueError as error:
+        return DatasetProfileResponse(
+            documentId=request.documentId,
+            success=False,
+            profiles=[],
+            warnings=[],
+            errorMessage=str(error),
+        )
+    except Exception as error:
+        return DatasetProfileResponse(
+            documentId=request.documentId,
+            success=False,
+            profiles=[],
+            warnings=[],
+            errorMessage=f"File reference could not be resolved: {type(error).__name__}.",
+        )
+
+    file_path = Path(resolved.file_path)
         
-        extension = request.extension.lower().strip()
-        
-        if not os.path.exists(request.filePath):
+    try:
+        if not file_path.exists():
             return DatasetProfileResponse(
                 documentId=request.documentId,
                 success=False,
                 profiles=[],
                 warnings=[],
-                errorMessage="File path does not exist."
+                errorMessage="File path does not exist.",
             )
+
+        if not file_path.is_file():
+            return DatasetProfileResponse(
+                documentId=request.documentId,
+                success=False,
+                profiles=[],
+                warnings=[],
+                errorMessage="File path is not a file.",
+            )
+
+        if extension not in [".csv", ".xlsx", ".xls"]:
+            return DatasetProfileResponse(
+                documentId=request.documentId,
+                success=False,
+                profiles=[],
+                warnings=[],
+                errorMessage="Invalid file extension. Only .csv, .xlsx, .xls are allowed.",
+            )
+            
+        if extension == ".csv":
+            df = pd.read_csv(str(file_path))
+            dataset_profile_tables = [build_table_profile(df, "default", 0)]
+        else:
+            dataset_profile_tables = []
+
+            with pd.ExcelFile(str(file_path)) as excel_file:
+                for index, sheet_name in enumerate(excel_file.sheet_names):
+                    df = pd.read_excel(excel_file, sheet_name=sheet_name)
+                    table_profile = build_table_profile(df, sheet_name, index)
+                    dataset_profile_tables.append(table_profile)
+
+        return DatasetProfileResponse(
+            documentId=request.documentId,
+            success=True,
+            profiles=dataset_profile_tables,
+            warnings=[],
+            errorMessage=None,
+        )
         
-        if (extension not in [".csv", ".xlsx", ".xls"]):
-            return DatasetProfileResponse(documentId=request.documentId, success=False, profiles=[], warnings=[], errorMessage="Invalid file extension. Only .csv, .xlsx, .xls are allowed.")
+    except Exception as error:
+        return DatasetProfileResponse(
+            documentId=request.documentId,
+            success=False,
+            profiles=[],
+            warnings=[],
+            errorMessage=f"Dataset profiling failed: {str(error)}",
+        )
         
-        if (extension == ".csv"):
-            df = pd.read_csv(request.filePath)
-            table_profile = build_table_profile(df, "default", 0)
-            datasetProfileTable = [table_profile]
-        elif (extension in [".xlsx", ".xls"]):
-            excel_file = pd.ExcelFile(request.filePath)
-            datasetProfileTable = []
-            for sheet_name in excel_file.sheet_names:
-                df = pd.read_excel(excel_file, sheet_name=sheet_name)
-                
-                table_profile = build_table_profile(df, sheet_name, 0)
-                datasetProfileTable.append(table_profile)
-                
-        return DatasetProfileResponse(documentId=request.documentId, success=True, profiles=datasetProfileTable, warnings=[], errorMessage=None)
-    except Exception as e:
-        return DatasetProfileResponse(documentId=request.documentId,success=False, profiles = [], warnings=[], errorMessage=f"Dataset profiling failed: {str(e)}")
-    
+    finally:
+        cleanup_resolved_file(resolved)
+        
 
 
 # Helper function
