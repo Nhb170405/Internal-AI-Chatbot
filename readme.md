@@ -24,6 +24,7 @@ The public demo intentionally provides a shared administrator account so reviewe
 | Role | Email | Password |
 |---|---|---|
 | Admin | `admin@company.com` | `Admin@123` |
+| Employee | `employee@company.com` | `Employee@123` |
 
 > **Important:** These credentials are intentionally public for the demo environment only. They must not be reused in a real production deployment.
 
