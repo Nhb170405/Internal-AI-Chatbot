@@ -423,24 +423,3 @@ Internal-AI-Chatbot/
 ├── docker-compose.yml     # Local multi-service setup
 └── README.md
 ```
-
-# Thứ tự README mình khuyên dùng
-
-Để README nhìn chuyên nghiệp, bạn nên đặt thứ tự như này:
-
-```text
-1. Title + short description + live demo
-2. Project overview
-3. Key features
-4. Architecture diagram
-5. Tech stack
-6. Security design
-7. Document/RAG pipeline
-8. Deployment
-9. Local setup
-10. Demo guide
-11. Screenshots
-12. What I learned
-13. Roadmap
-14. Known limitations
-```
