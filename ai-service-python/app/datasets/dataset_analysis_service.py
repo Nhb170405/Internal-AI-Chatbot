@@ -1,145 +1,262 @@
 from datetime import date, datetime
-import pandas as pd
 import math
-import numpy as np
-import os
+from pathlib import Path
 
+import numpy as np
+import pandas as pd
 
 from app.datasets.dataset_models import DatasetAnalysisRequest, DatasetAnalysisResponse
+from app.ingestion.file_reference_resolver import (
+    cleanup_resolved_file,
+    resolve_file_reference,
+)
 
 
 def analyze_dataset(request: DatasetAnalysisRequest) -> DatasetAnalysisResponse:
-    # Bai tap Milestone 11:
-    # 1. Validate filePath ton tai va extension hop le.
-    # 2. Doc file thanh pandas DataFrame:
-    #    - CSV: read_csv.
-    #    - XLSX/XLS: read_excel voi sheetName neu co, neu khong lay sheet dau tien.
-    # 3. Normalize operation ve lowercase.
-    # 4. Xu ly cac operation ban dau:
-    #    - preview: tra df.head(topN) dang list dict.
-    #    - list_columns: tra danh sach cot.
-    #    - count: tra so dong.
-    #    - sum: can valueColumn, cot phai numeric.
-    #    - average: can valueColumn, cot phai numeric.
-    #    - group_by: can groupByColumn va valueColumn, tinh sum theo group.
-    #    - top_n: can valueColumn, sort desc lay topN.
-    # 5. Neu thieu cot/operation sai thi return success=false voi errorMessage ro.
-    # 6. Khong goi OpenAI trong file nay. Pandas la noi tinh toan.
-    #
-    # Goi y:
-    # df[request.valueColumn].sum()
-    # df.groupby(request.groupByColumn)[request.valueColumn].sum()
-    try: 
-        _validate_response = _validate_basic_request(request)
-        if _validate_response is not None:
-            return _validate_response
-        
-        extension = request.extension.lower().strip()
-        if (extension in [".xlsx", ".xls"]) :
-            df = pd.read_excel(request.filePath, sheet_name=request.sheetName if request.sheetName else 0)
-        elif (extension == ".csv"):
-            df = pd.read_csv(request.filePath)
-        
-        value_column = _find_column(df, request.valueColumn)
-        group_by_column = _find_column(df, request.groupByColumn)
-        requested_value_column = request.valueColumn.strip() if request.valueColumn else None
-        requested_group_by_column = request.groupByColumn.strip() if request.groupByColumn else None
-        series = pd.to_numeric(df[value_column], errors="coerce") if value_column is not None else pd.Series(dtype=float)
-        operation = request.operation.lower().strip()
-        if operation == "preview":
-            result = dataframe_sample_rows(df, limit=_normalize_top_n(request.topN))
-        elif operation == "list_columns":
-            result = [str(column) for column in df.columns]
-        elif operation == "count":  
-            result = len(df)
-        elif operation == "sum":
-            if value_column is None:
-                return DatasetAnalysisResponse(documentId=request.documentId, success=False, operation=request.operation, result=None,rowCount=None,warnings = [], errorMessage=f"Column '{requested_value_column}' does not exist in the dataset.")
-            if series.notna().sum() == 0:
-                return DatasetAnalysisResponse(documentId=request.documentId, success=False, operation=request.operation, result=None,rowCount=None,warnings = [], errorMessage=f"Column '{value_column}' is not numeric.")
-            result = float(series.sum())
-        elif operation == "average":
-            if value_column is None:
-                return DatasetAnalysisResponse(documentId=request.documentId, success=False, operation=request.operation, result=None,rowCount=None,warnings = [], errorMessage=f"Column '{requested_value_column}' does not exist in the dataset.")
-            if series.notna().sum() == 0:
-                return DatasetAnalysisResponse(documentId=request.documentId, success=False, operation=request.operation, result=None,rowCount=None,warnings = [], errorMessage=f"Column '{value_column}' is not numeric.")
-            result = float(series.mean())
-        elif operation == "group_by":
-            if group_by_column is None:
-                return DatasetAnalysisResponse(documentId=request.documentId, success=False, operation=request.operation, result=None,rowCount=None,warnings = [], errorMessage=f"Group by column '{requested_group_by_column}' does not exist in the dataset.")
-            if value_column is None:
-                return DatasetAnalysisResponse(documentId=request.documentId, success=False, operation=request.operation, result=None,rowCount=None,warnings = [], errorMessage=f"Value column '{requested_value_column}' does not exist in the dataset.")
-            if series.notna().sum() == 0:
-                return DatasetAnalysisResponse(documentId=request.documentId, success=False, operation=request.operation, result=None,rowCount=None,warnings = [], errorMessage=f"Value column '{value_column}' is not numeric.")
-            working_df = df[[group_by_column]].copy()
-            working_df[value_column] = series
-            grouped_df = working_df.groupby(group_by_column, dropna=False)[value_column].sum().reset_index().sort_values(group_by_column, ascending=True)
-            result = dataframe_sample_rows(grouped_df, limit=_normalize_top_n(request.topN))
-        elif operation == "top_n":
-            if value_column is None:
-                return DatasetAnalysisResponse(documentId=request.documentId, success=False, operation=request.operation, result=None,rowCount=None,warnings = [], errorMessage=f"Value column '{requested_value_column}' does not exist in the dataset.")
-            if series.notna().sum() == 0:
-                return DatasetAnalysisResponse(documentId=request.documentId, success=False, operation=request.operation, result=None,rowCount=None,warnings = [], errorMessage=f"Value column '{value_column}' is not numeric.")
-            working_df = df.copy()
-            working_df["_numeric_value"] = series
-            top_n_df = working_df.sort_values("_numeric_value", ascending=False).head(_normalize_top_n(request.topN))
-            top_n_df = top_n_df.drop(columns=["_numeric_value"])
-            result = dataframe_sample_rows(top_n_df, limit=_normalize_top_n(request.topN))
-        else:
-            return DatasetAnalysisResponse(documentId=request.documentId, success=False, operation=request.operation, result=None,rowCount=None,warnings = [], errorMessage=f"Invalid operation '{request.operation}'.")
-        
-        return DatasetAnalysisResponse(documentId=request.documentId, success=True, operation=request.operation, result=result,rowCount=int(len(df)),warnings = [], errorMessage=None)
-    except Exception as e:
-        return DatasetAnalysisResponse(documentId=request.documentId, success=False, operation=request.operation, result=None,rowCount=None,warnings = [], errorMessage=str(e))
+    """Run deterministic analysis over an entire CSV/XLS/XLSX dataset.
 
-# Helper functions
-def _validate_basic_request(request):
-    if (request.filePath is None or request.filePath == ""):
-        return DatasetAnalysisResponse(documentId=request.documentId, success=False, operation=request.operation, result=None,rowCount=None,warnings = [], errorMessage="filePath is required")
-    
+    The backend may provide either a local path or a short-lived Azure Blob SAS
+    URL. The shared resolver converts both forms to a local path that pandas can
+    read. Any temporary download is always removed in the finally block.
+    """
+    validation_response = _validate_basic_request(request)
+    if validation_response is not None:
+        return validation_response
+
+    try:
+        resolved = resolve_file_reference(
+            file_reference_type=request.fileReferenceType,
+            file_reference_value=request.fileReferenceValue,
+            legacy_file_path=request.filePath,
+            extension=request.extension,
+        )
+    except ValueError as error:
+        return _error_response(request, str(error))
+    except Exception as error:
+        # Do not return the original exception text because it may contain a SAS URL.
+        return _error_response(
+            request,
+            f"File reference could not be resolved: {type(error).__name__}.",
+        )
+
+    file_path = Path(resolved.file_path)
+
+    try:
+        if not file_path.exists():
+            return _error_response(request, "Resolved file path does not exist.")
+
+        if not file_path.is_file():
+            return _error_response(request, "Resolved file path is not a file.")
+
+        extension = request.extension.lower().strip()
+        if extension in [".xlsx", ".xls"]:
+            df = pd.read_excel(
+                str(file_path),
+                sheet_name=request.sheetName if request.sheetName else 0,
+            )
+        else:
+            df = pd.read_csv(str(file_path))
+
+        return _analyze_dataframe(request, df)
+    except Exception as error:
+        return _error_response(request, f"Dataset analysis failed: {str(error)}")
+    finally:
+        cleanup_resolved_file(resolved)
+
+
+def _analyze_dataframe(
+    request: DatasetAnalysisRequest,
+    df: pd.DataFrame,
+) -> DatasetAnalysisResponse:
+    """Apply one validated operation to the complete dataframe."""
+    operation = request.operation.lower().strip()
+    value_column = _find_column(df, request.valueColumn)
+    group_by_column = _find_column(df, request.groupByColumn)
+    requested_value_column = request.valueColumn.strip() if request.valueColumn else None
+    requested_group_by_column = (
+        request.groupByColumn.strip() if request.groupByColumn else None
+    )
+    series = (
+        pd.to_numeric(df[value_column], errors="coerce")
+        if value_column is not None
+        else pd.Series(dtype=float)
+    )
+
+    if operation == "preview":
+        result = dataframe_sample_rows(df, limit=_normalize_top_n(request.topN))
+    elif operation == "list_columns":
+        result = [str(column) for column in df.columns]
+    elif operation == "count":
+        result = len(df)
+    elif operation == "sum":
+        if value_column is None:
+            return _error_response(
+                request,
+                f"Column '{requested_value_column}' does not exist in the dataset.",
+            )
+        if series.notna().sum() == 0:
+            return _error_response(request, f"Column '{value_column}' is not numeric.")
+        result = float(series.sum())
+    elif operation == "average":
+        if value_column is None:
+            return _error_response(
+                request,
+                f"Column '{requested_value_column}' does not exist in the dataset.",
+            )
+        if series.notna().sum() == 0:
+            return _error_response(request, f"Column '{value_column}' is not numeric.")
+        result = float(series.mean())
+    elif operation == "group_by":
+        if group_by_column is None:
+            return _error_response(
+                request,
+                f"Group by column '{requested_group_by_column}' does not exist in the dataset.",
+            )
+        if value_column is None:
+            return _error_response(
+                request,
+                f"Value column '{requested_value_column}' does not exist in the dataset.",
+            )
+        if series.notna().sum() == 0:
+            return _error_response(
+                request,
+                f"Value column '{value_column}' is not numeric.",
+            )
+
+        working_df = df[[group_by_column]].copy()
+        working_df[value_column] = series
+        grouped_df = (
+            working_df.groupby(group_by_column, dropna=False)[value_column]
+            .sum()
+            .reset_index()
+            .sort_values(group_by_column, ascending=True)
+        )
+        result = dataframe_sample_rows(
+            grouped_df,
+            limit=_normalize_top_n(request.topN),
+        )
+    elif operation == "top_n":
+        if value_column is None:
+            return _error_response(
+                request,
+                f"Value column '{requested_value_column}' does not exist in the dataset.",
+            )
+        if series.notna().sum() == 0:
+            return _error_response(
+                request,
+                f"Value column '{value_column}' is not numeric.",
+            )
+
+        working_df = df.copy()
+        working_df["_numeric_value"] = series
+        top_n_df = (
+            working_df.sort_values("_numeric_value", ascending=False)
+            .head(_normalize_top_n(request.topN))
+            .drop(columns=["_numeric_value"])
+        )
+        result = dataframe_sample_rows(
+            top_n_df,
+            limit=_normalize_top_n(request.topN),
+        )
+    else:
+        return _error_response(
+            request,
+            f"Invalid operation '{request.operation}'.",
+        )
+
+    return DatasetAnalysisResponse(
+        documentId=request.documentId,
+        success=True,
+        operation=operation,
+        result=result,
+        rowCount=int(len(df)),
+        warnings=[],
+        errorMessage=None,
+    )
+
+
+def _validate_basic_request(
+    request: DatasetAnalysisRequest,
+) -> DatasetAnalysisResponse | None:
+    """Validate operation arguments without assuming where the file is stored."""
+    operation = (request.operation or "").lower().strip()
     value_column = request.valueColumn.strip() if request.valueColumn else None
     group_by_column = request.groupByColumn.strip() if request.groupByColumn else None
 
-    if not os.path.exists(request.filePath):
-        return DatasetAnalysisResponse(
-            documentId=request.documentId,
-            success=False,
-            operation=request.operation or "",
-            result=None,
-            rowCount=None,
-            warnings=[],
-            errorMessage="File path does not exist."
+    if not operation:
+        return _error_response(request, "operation is required")
+
+    supported_operations = {
+        "preview",
+        "list_columns",
+        "count",
+        "sum",
+        "average",
+        "group_by",
+        "top_n",
+    }
+    if operation not in supported_operations:
+        return _error_response(
+            request,
+            f"Invalid operation '{request.operation}'.",
         )
-    if (request.operation is None or request.operation == ""):
-        return DatasetAnalysisResponse(documentId=request.documentId, success=False, operation=request.operation, result=None,rowCount=None,warnings = [], errorMessage="operation is required")
-    
-    if (request.operation.lower().strip() in ["preview", "top_n"] and (request.topN is None or request.topN <= 0)):
-        return DatasetAnalysisResponse(documentId=request.documentId, success=False, operation=request.operation, result=None,rowCount=None,warnings = [], errorMessage="topN must be a positive integer for preview and top_n operations.")
-    
-    if (request.operation.lower().strip() in ["sum", "average", "group_by", "top_n"] and (value_column  is None or value_column == "")):
-        return DatasetAnalysisResponse(documentId=request.documentId, success=False, operation=request.operation, result=None,rowCount=None,warnings = [], errorMessage="valueColumn is required for sum, average, group_by, and top_n operations.")
-    
-    if (request.operation.lower().strip() == "group_by" and (group_by_column is None or group_by_column == "")):
-        return DatasetAnalysisResponse(documentId=request.documentId, success=False, operation=request.operation, result=None,rowCount=None,warnings = [], errorMessage="groupByColumn is required for group_by operation.")
-    
+
+    if operation in ["preview", "top_n"] and (
+        request.topN is None or request.topN <= 0
+    ):
+        return _error_response(
+            request,
+            "topN must be a positive integer for preview and top_n operations.",
+        )
+
+    if operation in ["sum", "average", "group_by", "top_n"] and not value_column:
+        return _error_response(
+            request,
+            "valueColumn is required for sum, average, group_by, and top_n operations.",
+        )
+
+    if operation == "group_by" and not group_by_column:
+        return _error_response(
+            request,
+            "groupByColumn is required for group_by operation.",
+        )
+
     extension = (request.extension or "").lower().strip()
-    if (extension not in [".csv", ".xlsx", ".xls"]):
-        return DatasetAnalysisResponse(documentId=request.documentId, success=False, operation=request.operation, result=None,rowCount=None,warnings = [], errorMessage="Invalid file extension. Only .csv, .xlsx, .xls are allowed.")
-    
+    if extension not in [".csv", ".xlsx", ".xls"]:
+        return _error_response(
+            request,
+            "Invalid file extension. Only .csv, .xlsx, .xls are allowed.",
+        )
+
     return None
 
-def _find_column(df, requested_column: str | None):
+
+def _error_response(
+    request: DatasetAnalysisRequest,
+    message: str,
+) -> DatasetAnalysisResponse:
+    return DatasetAnalysisResponse(
+        documentId=request.documentId,
+        success=False,
+        operation=request.operation or "",
+        result=None,
+        rowCount=None,
+        warnings=[],
+        errorMessage=message,
+    )
+
+
+def _find_column(df: pd.DataFrame, requested_column: str | None):
     if requested_column is None or requested_column.strip() == "":
         return None
 
     normalized_request = requested_column.strip().lower()
-
     for column in df.columns:
-        column_name = str(column).strip()
-        if column_name.lower() == normalized_request:
+        if str(column).strip().lower() == normalized_request:
             return column
 
     return None
+
 
 def to_json_safe_value(value):
     if pd.isna(value):
@@ -161,10 +278,11 @@ def to_json_safe_value(value):
 
     return value
 
-def dataframe_sample_rows(df, limit: int = 5):
-    records = df.head(limit).to_dict(orient="records")
 
+def dataframe_sample_rows(df: pd.DataFrame, limit: int = 5):
+    records = df.head(limit).to_dict(orient="records")
     safe_records = []
+
     for row in records:
         safe_row = {}
         for key, value in row.items():
@@ -172,6 +290,7 @@ def dataframe_sample_rows(df, limit: int = 5):
         safe_records.append(safe_row)
 
     return safe_records
+
 
 def _normalize_top_n(top_n: int) -> int:
     if top_n is None or top_n <= 0:

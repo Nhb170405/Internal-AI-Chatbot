@@ -68,6 +68,7 @@ builder.Services.AddScoped<AssistantService>();
 // Tool-calling skeleton. Dang ky tung implementation bang IAssistantTool de
 // AssistantToolExecutor tu dong tao allow-list theo Definition.Name.
 builder.Services.AddScoped<IAssistantTool, SearchInternalDocumentsTool>();
+builder.Services.AddScoped<IAssistantTool, AnalyzeDatasetTool>();
 builder.Services.AddScoped<AssistantToolExecutor>();
 builder.Services.AddScoped<AdminAuditLogService>();
 builder.Services.AddScoped<AdminDashboardService>();
