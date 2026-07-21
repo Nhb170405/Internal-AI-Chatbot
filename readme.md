@@ -80,8 +80,9 @@ This project turns those files into a permission-aware AI assistant capable of a
 ### AI Chat
 
 - OpenAI-powered chat responses
-- Persistent chat sessions and messages
-- Recent conversation history
+- Tool-calling orchestration with a bounded multi-step loop
+- Per-user conversation history stored in browser local storage
+- Conversation titles generated from the user's first question
 - Token usage tracking
 - Input length validation
 - Rate limiting
@@ -96,11 +97,14 @@ This project turns those files into a permission-aware AI assistant capable of a
 - Vector indexing with Qdrant
 - Permission-aware semantic retrieval
 - Relevant-context injection into LLM requests
+- Source citations returned through both direct RAG and tool-calling flows
+- Citation UI focused on source filename and page location when available
 - Separation between deterministic tools and LLM reasoning
 
 ### Document Management
 
 - Upload and process PDF, DOCX, XLSX, CSV, and TXT files
+- Text-layer PDF parsing with OCR fallback for scanned PDFs
 - File size limits
 - Extension whitelist
 - Content-Type validation
@@ -114,10 +118,12 @@ This project turns those files into a permission-aware AI assistant capable of a
 
 - Detect workbook sheets and columns
 - Read structured table metadata without using LLM tokens
-- Analyze tabular data through a dedicated Python service
+- Analyze complete CSV/XLSX dataframes through a dedicated Python service
+- Deterministic `preview`, `list_columns`, `count`, `sum`, `average`, `group_by`, and `top_n` operations
+- `analyze_dataset` tool for exact spreadsheet calculations from chat
 - Generate charts from structured data
 - Avoid sending entire large spreadsheets directly to the LLM
-- Route simple schema questions to deterministic tools
+- Enforce document access permissions before a dataset tool can read a file
 
 ### Security Baseline
 
@@ -268,13 +274,14 @@ sequenceDiagram
 
     User->>UI: Ask a document question
     UI->>API: Send authenticated chat request
+    API->>LLM: Select a tool when external data is required
+    LLM->>API: Call search_internal_documents
     API->>API: Resolve user role and access level
     API->>Vector: Search permitted document chunks
     Vector-->>API: Return relevant context
-    API->>LLM: Send system prompt, question and context
-    LLM-->>API: Return grounded answer
-    API->>API: Store chat history and token usage
-    API-->>UI: Return answer
+    API->>LLM: Return tool result and source citations
+    LLM-->>API: Return grounded final answer
+    API-->>UI: Return answer, token usage and citations
 ```
 
 ### Spreadsheet Tool Flow
@@ -282,21 +289,21 @@ sequenceDiagram
 ```mermaid
 flowchart LR
     Question["User question"]
-    Router["Request routing"]
-    Metadata["Metadata / schema tool"]
-    Python["Python table-analysis tool"]
-    LLM["LLM explanation"]
+    LLM["OpenAI tool selection"]
+    Tool["analyze_dataset tool"]
+    Python["Deterministic Pandas analysis"]
+    Explain["LLM explanation"]
     Result["Final response"]
 
-    Question --> Router
-    Router -->|Columns, sheets, schema| Metadata
-    Router -->|Calculation, analysis, chart| Python
-    Metadata --> Result
-    Python --> LLM
-    LLM --> Result
+    Question --> LLM
+    LLM -->|File, sheet, column and operation| Tool
+    Tool --> Python
+    Python --> Tool
+    Tool --> Explain
+    Explain --> Result
 ```
 
-Simple questions such as “Which columns are available?” can be answered from stored metadata with little or no LLM usage. More complex analytical requests are delegated to the Python service, which returns structured results before natural-language explanation.
+Spreadsheet questions are delegated to deterministic Pandas operations instead of being calculated from RAG snippets or sample rows. The current tool supports CSV and XLSX files and returns structured results before the model produces a natural-language explanation.
 
 ---
 
@@ -424,7 +431,7 @@ Current routing principles:
 - Normal conversation uses a short prompt and limited history.
 - RAG requests retrieve only relevant chunks.
 - Spreadsheet schema questions use stored metadata.
-- Deterministic calculations are handled by tools.
+- Exact spreadsheet calculations are handled by the `analyze_dataset` tool over the complete dataframe.
 - Large files are parsed before LLM involvement.
 - Chat token usage is recorded for analysis.
 
@@ -465,6 +472,8 @@ QDRANT_COLLECTION=internal_documents
 ```
 
 Never commit the real `.env` file.
+
+The bundled local Qdrant container does not require an API key. `QDRANT_API_KEY` may remain empty locally. A hosted Qdrant deployment should provide its real API key through cloud secrets.
 
 ### 3. Start the application
 
@@ -560,11 +569,13 @@ OpenAI__ChatModel
 PythonService__BaseUrl
 PythonService__TimeoutSeconds
 Qdrant__Url
+Qdrant__ApiKey
 Qdrant__Collection
 FileStorage__Provider
 AzureBlobStorage__ConnectionString
 Cors__AllowedOrigins__0
 Database__AutoMigrate
+Assistant__ToolCallingEnabled
 ```
 
 ### Frontend environment variables
@@ -651,14 +662,16 @@ Implemented:
 
 - [x] Authentication and guest sessions
 - [x] Role-based authorization
-- [x] Chat sessions and history
+- [x] Browser-local, per-user chat sessions and first-question titles
 - [x] OpenAI integration
 - [x] Document upload
 - [x] File validation
 - [x] OCR and document ingestion
 - [x] Chunking and vector indexing
 - [x] RAG document search
-- [x] Spreadsheet metadata and analysis tools
+- [x] OpenAI tool calling for document search and dataset analysis
+- [x] RAG citations preserved through tool-calling responses
+- [x] Spreadsheet metadata and deterministic full-dataframe analysis
 - [x] Chart generation
 - [x] Background jobs
 - [x] Audit logging
@@ -670,12 +683,13 @@ Implemented:
 
 ## Roadmap
 
-- [ ] Complete the admin user-management frontend
 - [ ] Add CSRF protection for state-changing requests
 - [ ] Add AI response streaming
 - [ ] Add live document-processing progress
 - [ ] Add hybrid semantic and keyword search
-- [ ] Add source citations to RAG answers
+- [ ] Store page-level metadata directly on every document chunk
+- [ ] Add exhaustive document-scoped retrieval for complete-list questions
+- [ ] Add spreadsheet filters, min/max/median, distinct counts, and multi-column grouping
 - [ ] Expand automated unit and integration tests
 - [ ] Add authorization and concurrency test suites
 - [ ] Add upload malware scanning
@@ -721,6 +735,10 @@ The most important lesson was learning how to turn an unclear idea into a workin
 - Automated testing is still limited compared with a production-grade backend.
 - Fine-grained organization and department permissions are not complete.
 - AI responses can still be affected by retrieval quality and model behavior.
+- Semantic top-K retrieval may omit items when a complete list is spread across many chunks.
+- Citation page numbers depend on available parser/chunk metadata and may be unavailable.
+- CSV/XLSX analysis currently supports a fixed operation set and does not yet support arbitrary filters, joins, or cross-file analysis.
+- Cross-site authentication cookies may be blocked by strict private-browsing or third-party-cookie settings because the demo frontend and API use different Azure domains.
 - Azure services may incur costs after free quotas or credits are exhausted.
 - The project should undergo a formal security review before production use.
 
