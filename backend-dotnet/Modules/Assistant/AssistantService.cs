@@ -6,6 +6,7 @@ using backend_dotnet.Infrastructure.Errors;
 using backend_dotnet.Modules.Audit;
 using backend_dotnet.Modules.Chat;
 using backend_dotnet.Modules.Rag;
+using Microsoft.Extensions.Options;
 
 namespace backend_dotnet.Modules.Assistant;
 
@@ -16,19 +17,25 @@ public sealed class AssistantService
     private readonly RagService _ragService;
     private readonly AssistantDatasetProfileHandler _datasetProfileHandler;
     private readonly AuditLogService _auditLogService;
+    private readonly AssistantToolCallingService _toolCallingService;
+    private readonly AssistantOptions _assistantOptions;
 
     public AssistantService(
         AssistantRouter router,
         ChatService chatService,
         RagService ragService,
         AssistantDatasetProfileHandler datasetProfileHandler,
-        AuditLogService auditLogService)
+        AuditLogService auditLogService,
+        AssistantToolCallingService toolCallingService,
+        IOptions<AssistantOptions> assistantOptions)
     {
         _router = router;
         _chatService = chatService;
         _ragService = ragService;
         _datasetProfileHandler = datasetProfileHandler;
         _auditLogService = auditLogService;
+        _toolCallingService = toolCallingService;
+        _assistantOptions = assistantOptions.Value;
     }
 
     public async Task<AssistantChatResponse> SendAsync(AssistantChatRequest request, CancellationToken cancellationToken = default)
@@ -67,6 +74,13 @@ public sealed class AssistantService
         if (message.Length > 4000)
         {
             throw new ValidationApiException("invalid_assistant_request", "Message is too long.");
+        }
+
+        if (_assistantOptions.ToolCallingEnabled)
+        {
+            return await HandleToolCallingAsync(
+                message,
+                cancellationToken);
         }
 
         var topK = request.TopK <= 0 ? 3 : Math.Min(request.TopK, 10);
@@ -186,5 +200,24 @@ public sealed class AssistantService
                 topK
             })
         }, cancellationToken);
+    }
+
+    private async Task<AssistantChatResponse> HandleToolCallingAsync(
+    string message,
+    CancellationToken cancellationToken)
+    {
+        var result = await _toolCallingService.SendAsync(
+            message,
+            cancellationToken);
+
+        return new AssistantChatResponse
+        {
+            Route = AssistantRoute.ToolCalling,
+            Answer = result.Answer,
+            Model = result.Model,
+            PromptTokens = result.PromptTokens,
+            CompletionTokens = result.CompletionTokens,
+            TotalTokens = result.TotalTokens
+        };
     }
 }

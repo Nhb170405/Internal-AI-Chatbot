@@ -73,7 +73,7 @@ export function ChatPage() {
     try {
       const response = await sendAssistantMessage({
         message: trimmedMessage,
-        topK: 3
+        topK: 10
       });
 
       const now = new Date().toISOString();
@@ -276,6 +276,10 @@ export function ChatPage() {
 }
 
 function routeTone(route: AssistantChatResponse["route"]) {
+  if (route === "tool_calling") {
+    return "info";
+  }
+
   if (route === "rag") {
     return "info";
   }
