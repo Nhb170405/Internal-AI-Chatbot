@@ -21,9 +21,9 @@
 
 The public demo intentionally provides a shared administrator account so reviewers and interviewers can explore the application without creating an account.
 
-| Role | Email | Password |
-|---|---|---|
-| Admin | `admin@company.com` | `Admin@123` |
+| Role     | Email                  | Password       |
+| -------- | ---------------------- | -------------- |
+| Admin    | `admin@company.com`    | `Admin@123`    |
 | Employee | `employee@company.com` | `Employee@123` |
 
 > **Important:** These credentials are intentionally public for the demo environment only. They must not be reused in a real production deployment.
@@ -201,16 +201,16 @@ flowchart LR
 
 ### Architectural Responsibility
 
-| Component | Responsibility |
-|---|---|
-| React frontend | UI, authentication state, chat experience, uploads, API calls |
-| ASP.NET Core backend | Main API gateway, authorization, business rules, persistence, orchestration |
-| Python FastAPI service | OCR, parsing, chunking support, dataset analysis, chart generation |
-| SQL Server | Users, sessions, documents, chat history, audit logs, metadata |
-| Qdrant | Embeddings and semantic vector retrieval |
-| OpenAI API | Natural-language reasoning and answer generation |
-| Hangfire | Long-running document-processing jobs |
-| Azure Blob / local storage | Original documents and generated assets |
+| Component                  | Responsibility                                                              |
+| -------------------------- | --------------------------------------------------------------------------- |
+| React frontend             | UI, authentication state, chat experience, uploads, API calls               |
+| ASP.NET Core backend       | Main API gateway, authorization, business rules, persistence, orchestration |
+| Python FastAPI service     | OCR, parsing, chunking support, dataset analysis, chart generation          |
+| SQL Server                 | Users, sessions, documents, chat history, audit logs, metadata              |
+| Qdrant                     | Embeddings and semantic vector retrieval                                    |
+| OpenAI API                 | Natural-language reasoning and answer generation                            |
+| Hangfire                   | Long-running document-processing jobs                                       |
+| Azure Blob / local storage | Original documents and generated assets                                     |
 
 The frontend never calls the Python service directly. All client requests pass through the ASP.NET Core backend, where authentication and authorization are enforced.
 
@@ -309,21 +309,21 @@ Spreadsheet questions are delegated to deterministic Pandas operations instead o
 
 ## Technology Stack
 
-| Area | Technology |
-|---|---|
-| Frontend | React, TypeScript, Vite, React Router |
-| Backend | ASP.NET Core Web API, C#, Entity Framework Core |
-| Authentication | ASP.NET Core Cookie Authentication, Claims, RBAC |
-| Database | SQL Server / Azure SQL |
-| AI Service | Python, FastAPI |
-| AI Provider | OpenAI API |
-| Vector Search | Qdrant |
-| Background Jobs | Hangfire |
-| File Processing | OCR, PDF/DOCX/XLSX/CSV/TXT parsing |
-| Storage | Local volumes, Azure Blob Storage-ready |
-| Containers | Docker, Docker Compose |
-| Cloud | Azure Static Web Apps, Azure Container Apps |
-| CI/CD | GitHub Actions |
+| Area            | Technology                                       |
+| --------------- | ------------------------------------------------ |
+| Frontend        | React, TypeScript, Vite, React Router            |
+| Backend         | ASP.NET Core Web API, C#, Entity Framework Core  |
+| Authentication  | ASP.NET Core Cookie Authentication, Claims, RBAC |
+| Database        | SQL Server / Azure SQL                           |
+| AI Service      | Python, FastAPI                                  |
+| AI Provider     | OpenAI API                                       |
+| Vector Search   | Qdrant                                           |
+| Background Jobs | Hangfire                                         |
+| File Processing | OCR, PDF/DOCX/XLSX/CSV/TXT parsing               |
+| Storage         | Local volumes, Azure Blob Storage-ready          |
+| Containers      | Docker, Docker Compose                           |
+| Cloud           | Azure Static Web Apps, Azure Container Apps      |
+| CI/CD           | GitHub Actions                                   |
 
 ---
 
@@ -376,11 +376,11 @@ Important design choices:
 
 ## Authentication and Roles
 
-| Role | Main permissions |
-|---|---|
-| Guest | Temporary session, chat, access to Guest-level documents |
+| Role     | Main permissions                                                 |
+| -------- | ---------------------------------------------------------------- |
+| Guest    | Temporary session, chat, access to Guest-level documents         |
 | Employee | Internal login, upload documents, access Employee and Guest data |
-| Admin | Full document access, user administration, system management |
+| Admin    | Full document access, user administration, system management     |
 
 The backend does not trust role values sent by the frontend. User identity and role are loaded from server-side data and stored in authenticated claims.
 
@@ -483,13 +483,13 @@ docker compose up --build
 
 Typical local endpoints:
 
-| Service | Address |
-|---|---|
-| Frontend | http://localhost:5173 |
+| Service              | Address               |
+| -------------------- | --------------------- |
+| Frontend             | http://localhost:5173 |
 | ASP.NET Core backend | http://localhost:5055 |
-| Python service | http://localhost:8000 |
-| Qdrant | http://localhost:6333 |
-| SQL Server | localhost:14333 |
+| Python service       | http://localhost:8000 |
+| Qdrant               | http://localhost:6333 |
+| SQL Server           | localhost:14333       |
 
 ### 4. Stop the application
 
@@ -592,14 +592,14 @@ Vite injects frontend environment variables at build time. Production values mus
 
 The current public demo uses:
 
-| Component | Azure service |
-|---|---|
-| Frontend | Azure Static Web Apps |
-| Backend | Azure Container Apps |
-| Python service | Azure Container Apps |
+| Component           | Azure service                     |
+| ------------------- | --------------------------------- |
+| Frontend            | Azure Static Web Apps             |
+| Backend             | Azure Container Apps              |
+| Python service      | Azure Container Apps              |
 | Relational database | Azure SQL / SQL Server deployment |
-| File storage | Azure Blob Storage-ready |
-| CI/CD | GitHub Actions |
+| File storage        | Azure Blob Storage-ready          |
+| CI/CD               | GitHub Actions                    |
 
 The Python service is designed as an internal backend dependency and is not called directly from the browser.
 
