@@ -140,14 +140,6 @@ export function AdminUsersPage() {
         )}
       </div>
 
-      <div className="panel">
-        <h2>Kế hoạch nâng cấp</h2>
-        <div className="admin-checklist">
-          <span>Đổi role hoặc disable user cần endpoint PATCH riêng và audit log.</span>
-          <span>Không cho admin tự hạ quyền/xóa chính mình nếu chưa có xác nhận mạnh.</span>
-          <span>Không bao giờ trả PasswordHash, cookie, session key hoặc token ra frontend.</span>
-        </div>
-      </div>
     </section>
   );
 }

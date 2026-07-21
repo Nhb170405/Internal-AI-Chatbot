@@ -1,8 +1,9 @@
 import { FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import { sendAssistantMessage } from "../../api/chatApi";
+import { listDocuments } from "../../api/documentsApi";
 import { Badge } from "../../components/ui/Badge";
 import { Button } from "../../components/ui/Button";
-import type { AssistantChatResponse } from "../../types/chat";
+import type { AssistantChatResponse, Citation } from "../../types/chat";
 import { useAuth } from "../auth/useAuth";
 
 type ChatThreadItem = {
@@ -25,10 +26,11 @@ type LocalChatState = {
 };
 
 const assistantRules = [
-  "Không upload trùng tên file khi file cũ vẫn còn dùng được.",
-  "Tên file nên có chủ đề và thời gian, ví dụ: sales_report_2026_05.xlsx.",
-  "Tài liệu nội bộ hỏi bằng RAG; dữ liệu bảng dùng Datasets hoặc Charts.",
-  "Không nhập API key, mật khẩu, cookie hoặc dữ liệu cá nhân nhạy cảm vào chat."
+  "Bạn có thể hỏi đáp hoặc yêu cầu tóm tắt nội dung trong file PDF, DOCX và TXT đã tải lên.",
+  "Với file CSV và XLSX, chatbot hỗ trợ xem cột, đếm dòng, tính tổng, trung bình, nhóm dữ liệu và tìm giá trị cao nhất.",
+  "Khi hỏi về dữ liệu bảng, hãy nêu rõ tên file, tên cột và tên sheet nếu file có nhiều sheet.",
+  "Kết quả có thể kém chính xác với file scan mờ, bảng phức tạp, dữ liệu sai định dạng hoặc câu hỏi thiếu thông tin.",
+  "Không gửi mật khẩu, API key hoặc dữ liệu cá nhân nhạy cảm vào cuộc trò chuyện."
 ];
 
 export function ChatPage() {
@@ -38,6 +40,7 @@ export function ChatPage() {
   const [chatState, setChatState] = useState<LocalChatState>(() => loadStoredChatState(storageKey));
   const [isSending, setIsSending] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [documentNames, setDocumentNames] = useState<Record<string, string>>({});
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
   const activeSession = chatState.sessions.find((session) => session.id === chatState.activeSessionId) ?? chatState.sessions[0];
@@ -46,6 +49,26 @@ export function ChatPage() {
   useEffect(() => {
     setChatState(loadStoredChatState(storageKey));
   }, [storageKey]);
+
+  useEffect(() => {
+    let isCurrent = true;
+
+    void listDocuments()
+      .then((documents) => {
+        if (isCurrent) {
+          setDocumentNames(
+            Object.fromEntries(documents.map((document) => [document.id, document.originalFileName]))
+          );
+        }
+      })
+      .catch(() => {
+        // Citation vẫn có thể hiển thị một tên thay thế nếu danh sách tài liệu chưa tải được.
+      });
+
+    return () => {
+      isCurrent = false;
+    };
+  }, []);
 
   useEffect(() => {
     localStorage.setItem(storageKey, JSON.stringify(chatState));
@@ -174,7 +197,6 @@ export function ChatPage() {
           ))}
         </div>
 
-        <p className="helper-text">Các phiên chat hiện được lưu trong trình duyệt theo user. Backend session cho Assistant sẽ làm ở bước nâng cấp sau.</p>
         <div className="chat-session-meta">
           <span>{totalThreadTokens} tokens trong phiên đang chọn</span>
         </div>
@@ -260,11 +282,8 @@ export function ChatPage() {
         {lastResponse?.citations?.length ? (
           lastResponse.citations.map((citation) => (
             <div className="citation-item" key={citation.chunkId}>
-              <strong>Document {citation.documentId.slice(0, 8)}</strong>
-              <span>
-                Chunk {citation.chunkIndex} - score {citation.score.toFixed(3)}
-              </span>
-              <p>{citation.snippet}</p>
+              <strong>{documentNames[citation.documentId] ?? `Tài liệu ${citation.documentId.slice(0, 8)}`}</strong>
+              <span>{formatCitationLocation(citation)}</span>
             </div>
           ))
         ) : (
@@ -343,5 +362,27 @@ function createEmptySession(): LocalChatSession {
 }
 
 function makeSessionTitle(message: string) {
-  return message.length > 36 ? `${message.slice(0, 36)}...` : message;
+  const normalized = message.replace(/\s+/g, " ").trim();
+  const maxLength = 30;
+
+  if (normalized.length <= maxLength) {
+    return normalized;
+  }
+
+  const candidate = normalized.slice(0, maxLength + 1);
+  const lastSpace = candidate.lastIndexOf(" ");
+  const shortened = lastSpace >= 16 ? candidate.slice(0, lastSpace) : normalized.slice(0, maxLength);
+
+  return `${shortened.trimEnd()}...`;
+}
+
+function formatCitationLocation(citation: Citation) {
+  if (citation.pageNumber) {
+    return `Trang ${citation.pageNumber}`;
+  }
+
+  // PDF parser chèn nhãn "Page N:" vào nội dung; dùng nhãn này trong lúc
+  // backend chưa lưu pageNumber riêng trong metadata của chunk.
+  const pageMatch = citation.snippet.match(/(?:Page|Trang)\s+(\d+)\s*:/i);
+  return pageMatch ? `Trang ${pageMatch[1]}` : "Không có thông tin trang";
 }

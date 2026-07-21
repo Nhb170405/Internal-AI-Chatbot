@@ -1,4 +1,4 @@
-import { BarChart3, Bot, Database, FileText, LayoutDashboard, ScrollText, Users } from "lucide-react";
+import { BarChart3, Bot, FileText, LayoutDashboard, ScrollText, Users } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import { useAuth } from "../../features/auth/useAuth";
 
@@ -19,7 +19,6 @@ export function Sidebar() {
       <nav className="nav-list">
         <NavItem to="/chat" icon={<Bot size={18} />} label="Chat" />
         <NavItem to="/documents" icon={<FileText size={18} />} label="Documents" />
-        <NavItem to="/datasets" icon={<Database size={18} />} label="Datasets" />
         <NavItem to="/charts" icon={<BarChart3 size={18} />} label="Charts" />
 
         {role === "admin" && (

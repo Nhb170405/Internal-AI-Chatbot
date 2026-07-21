@@ -1,4 +1,5 @@
 using System.Text.Json;
+using backend_dotnet.Contracts.Rag;
 using backend_dotnet.Infrastructure.OpenAI;
 using backend_dotnet.Modules.Assistant.Tools;
 
@@ -17,7 +18,7 @@ public sealed class AssistantToolCallingService
         _toolExecutor = toolExecutor;
     }
 
-    public async Task<OpenAIChatResult> SendAsync(
+    public async Task<AssistantToolCallingResult> SendAsync(
         string userMessage,
         CancellationToken cancellationToken = default)
     {
@@ -46,6 +47,7 @@ public sealed class AssistantToolCallingService
         };
 
         const int maxToolSteps = 5;
+        var citations = new Dictionary<Guid, CitationDto>();
 
         for (var step = 0; step < maxToolSteps; step++)
         {
@@ -56,7 +58,11 @@ public sealed class AssistantToolCallingService
 
             if (!result.HasToolCalls)
             {
-                return result;
+                return new AssistantToolCallingResult
+                {
+                    ChatResult = result,
+                    Citations = citations.Values.ToList()
+                };
             }
 
             // Protocol yeu cau gui lai assistant message chua tool_calls truoc
@@ -79,6 +85,8 @@ public sealed class AssistantToolCallingService
                     toolCall.ArgumentsJson,
                     cancellationToken);
 
+                CollectCitations(toolCall.Name, toolResult, citations);
+
                 messages.Add(new OpenAIChatMessage
                 {
                     Role = "tool",
@@ -90,5 +98,28 @@ public sealed class AssistantToolCallingService
 
         throw new InvalidOperationException(
             $"Assistant exceeded the maximum of {maxToolSteps} tool-calling steps.");
+    }
+
+    private static void CollectCitations(
+        string toolName,
+        AssistantToolExecutionResult toolResult,
+        IDictionary<Guid, CitationDto> citations)
+    {
+        if (!toolResult.Success ||
+            toolName != "search_internal_documents" ||
+            toolResult.Output.ValueKind != JsonValueKind.Object ||
+            !toolResult.Output.TryGetProperty("Citations", out var citationJson) ||
+            citationJson.ValueKind != JsonValueKind.Array)
+        {
+            return;
+        }
+
+        var toolCitations = citationJson.Deserialize<List<CitationDto>>(
+            new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? [];
+
+        foreach (var citation in toolCitations)
+        {
+            citations[citation.ChunkId] = citation;
+        }
     }
 }
