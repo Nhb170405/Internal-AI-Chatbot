@@ -32,7 +32,7 @@ public sealed class SearchInternalDocumentsTool : IAssistantTool
                 topK = new
                 {
                     type = new[] { "integer", "null" },
-                    description = "Maximum number of relevant chunks, from 1 to 10.",
+                    description = "Number of relevant chunks. Use 8-10 for exhaustive list, summary, achievement, policy, requirement, or 'all' questions.",
                     minimum = 1,
                     maximum = 10
                 }
@@ -73,7 +73,7 @@ public sealed class SearchInternalDocumentsTool : IAssistantTool
         var response = await _ragService.SendAsync(new RagChatRequest
         {
             Question = arguments.Question.Trim(),
-            TopK = Math.Clamp(arguments.TopK ?? 3, 1, 10)
+            TopK = Math.Clamp(arguments.TopK ?? 10, 1, 10)
         }, cancellationToken);
 
         return AssistantToolExecutionResult.Ok(new
