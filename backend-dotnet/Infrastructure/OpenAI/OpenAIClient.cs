@@ -2,6 +2,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using backend_dotnet.Modules.Assistant.Tools;
 
 namespace backend_dotnet.Infrastructure.OpenAI;
 
@@ -16,32 +17,23 @@ public sealed class OpenAIClient
         _options = options;
     }
 
-    public async Task<OpenAIChatResult> SendChatAsync(IReadOnlyList<OpenAIChatMessage> messages, CancellationToken cancellationToken = default)
+    // Giu overload cu de ChatService va RagService tiep tuc hoat dong trong luc
+    // tool calling dang duoc trien khai tung buoc.
+    public Task<OpenAIChatResult> SendChatAsync(
+        IReadOnlyList<OpenAIChatMessage> messages,
+        CancellationToken cancellationToken = default)
     {
-        // TODO:
-        // 1. Validate _options.ApiKey khong rong.
-        // 2. Validate _options.ChatModel khong rong.
-        // 3. Tao HTTP request toi OpenAI chat endpoint.
-        // 4. Set Authorization header:
-        //    Bearer {ApiKey}
-        // 5. Tao JSON body gom:
-        //    - model
-        //    - messages
-        // 6. Gui request bang _httpClient.
-        // 7. Neu OpenAI tra loi loi:
-        //    - doc status code/body an toan.
-        //    - throw exception ro rang cho ChatService/Controller xu ly.
-        // 8. Parse response:
-        //    - answer tu choices[0].message.content
-        //    - usage.prompt_tokens
-        //    - usage.completion_tokens
-        //    - usage.total_tokens
-        // 9. Return OpenAIChatResult.
-        //
-        // Luu y:
-        // - Khong log API key.
-        // - Khong gui chat history dai trong Milestone 2.
-        // - Tool calling/RAG de milestone sau.
+        return SendChatAsync(messages, [], cancellationToken);
+    }
+
+    public async Task<OpenAIChatResult> SendChatAsync(
+        IReadOnlyList<OpenAIChatMessage> messages,
+        IReadOnlyList<AssistantToolDefinition> tools,
+        CancellationToken cancellationToken = default)
+    {
+        // Gui Chat Completions request. Neu tools rong, method hoat dong nhu chat thuong.
+        // Neu co tools, model co the tra content hoac tool_calls; method nay chi parse,
+        // khong thuc thi tool. Assistant orchestrator se thuc thi tool o lop cao hon.
         if (string.IsNullOrWhiteSpace(_options.BaseUrl))
         {
             throw new InvalidOperationException("Thieu BaseUrl");
@@ -62,26 +54,68 @@ public sealed class OpenAIClient
             throw new InvalidOperationException("Thieu Message");
         }
 
-        if (messages.Any(m => string.IsNullOrWhiteSpace(m.Role) || string.IsNullOrWhiteSpace(m.Content)))
+        if (messages.Any(m => string.IsNullOrWhiteSpace(m.Role)))
         {
             throw new InvalidOperationException("Message thieu Role");
         }
 
-        var requestBody = new
+        if (messages.Any(m =>
+                string.IsNullOrWhiteSpace(m.Content) &&
+                (m.ToolCalls is null || m.ToolCalls.Count == 0)))
         {
-            model = _options.ChatModel,
-            messages = messages.Select(m => new
+            throw new InvalidOperationException("Message phai co Content hoac ToolCalls");
+        }
+
+        tools ??= [];
+
+        // Dung dictionary de chi them tools/tool_choice khi caller thuc su bat tool calling.
+        // Nho vay overload cu van gui payload giong nhu truoc.
+        var requestBody = new Dictionary<string, object?>
+        {
+            ["model"] = _options.ChatModel,
+            ["messages"] = messages.Select(m => new Dictionary<string, object?>
             {
-                role = m.Role,
-                content = m.Content
-            })
+                ["role"] = m.Role,
+                ["content"] = m.Content,
+                ["tool_call_id"] = m.ToolCallId,
+                ["tool_calls"] = m.ToolCalls?.Select(call => new
+                {
+                    id = call.Id,
+                    type = "function",
+                    function = new
+                    {
+                        name = call.Name,
+                        arguments = call.ArgumentsJson
+                    }
+                })
+            }).ToList()
         };
+
+        if (tools.Count > 0)
+        {
+            requestBody["tools"] = tools.Select(tool => new
+            {
+                type = "function",
+                function = new
+                {
+                    name = tool.Name,
+                    description = tool.Description,
+                    parameters = tool.Parameters,
+                    strict = tool.Strict
+                }
+            }).ToList();
+            requestBody["tool_choice"] = "auto";
+        }
 
         using var request = new HttpRequestMessage(HttpMethod.Post, _options.BaseUrl.TrimEnd('/') + "/chat/completions");
 
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _options.ApiKey);
 
-        request.Content = JsonContent.Create(requestBody);
+        // Khong gui cac field tool_call_id/tool_calls co gia tri null cho message thuong.
+        request.Content = JsonContent.Create(requestBody, options: new JsonSerializerOptions
+        {
+            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+        });
 
         using var response = await _httpClient.SendAsync(request, cancellationToken);
 
@@ -95,21 +129,41 @@ public sealed class OpenAIClient
         var parsed = JsonSerializer.Deserialize<OpenAIChatCompletionResponse>(responseBody, new JsonSerializerOptions { PropertyNameCaseInsensitive = true }
         );
 
-        var answer = parsed?
+        var responseMessage = parsed?
             .Choices?
             .FirstOrDefault()?
-            .Message?
-            .Content;
+            .Message;
 
+        var answer = responseMessage?.Content;
 
-        if (string.IsNullOrWhiteSpace(answer))
+        // Chi map function call co du id, name va arguments. Arguments van la JSON string;
+        // tung IAssistantTool se deserialize va validate theo schema cua rieng no.
+        var toolCalls = responseMessage?
+            .ToolCalls?
+            .Where(call =>
+                string.Equals(call.Type, "function", StringComparison.Ordinal) &&
+                !string.IsNullOrWhiteSpace(call.Id) &&
+                call.Function is not null &&
+                !string.IsNullOrWhiteSpace(call.Function.Name) &&
+                !string.IsNullOrWhiteSpace(call.Function.Arguments))
+            .Select(call => new OpenAIToolCall
+            {
+                Id = call.Id!,
+                Name = call.Function!.Name!,
+                ArgumentsJson = call.Function.Arguments!
+            })
+            .ToList()
+            ?? [];
+
+        if (string.IsNullOrWhiteSpace(answer) && toolCalls.Count == 0)
         {
-            throw new InvalidOperationException("OpenAI API response did not contain an answer.");
+            throw new InvalidOperationException("OpenAI API response did not contain content or a valid tool call.");
         }
 
         return new OpenAIChatResult
         {
-            Answer = answer,
+            Answer = answer ?? string.Empty,
+            ToolCalls = toolCalls,
             PromptTokens = parsed?.Usage?.PromptTokens ?? 0,
             CompletionTokens = parsed?.Usage?.CompletionTokens ?? 0,
             TotalTokens = parsed?.Usage?.TotalTokens ?? 0,
@@ -151,6 +205,9 @@ public sealed class OpenAIClient
     {
         [JsonPropertyName("content")]
         public string? Content { get; set; }
+
+        [JsonPropertyName("tool_calls")]
+        public List<OpenAIResponseToolCall>? ToolCalls { get; set; }
     }
 
     private sealed class OpenAIUsage
@@ -163,5 +220,26 @@ public sealed class OpenAIClient
 
         [JsonPropertyName("total_tokens")]
         public int TotalTokens { get; set; }
+    }
+
+    private sealed class OpenAIResponseToolCall
+    {
+        [JsonPropertyName("id")]
+        public string? Id { get; set; }
+
+        [JsonPropertyName("type")]
+        public string? Type { get; set; }
+
+        [JsonPropertyName("function")]
+        public OpenAIResponseFunctionCall? Function { get; set; }
+    }
+
+    private sealed class OpenAIResponseFunctionCall
+    {
+        [JsonPropertyName("name")]
+        public string? Name { get; set; }
+
+        [JsonPropertyName("arguments")]
+        public string? Arguments { get; set; }
     }
 }

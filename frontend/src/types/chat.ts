@@ -34,7 +34,7 @@ export type AssistantChatRequest = {
 };
 
 export type AssistantChatResponse = {
-  route: "chitchat" | "rag" | "document_metadata" | "dataset_profile" | "dataset_analyze" | "chart" | "unsupported";
+  route: "chitchat" | "rag" | "document_metadata" | "dataset_profile" | "dataset_analyze" | "chart" | "unsupported" | "tool_calling";
   answer: string;
   model: string | null;
   promptTokens: number | null;

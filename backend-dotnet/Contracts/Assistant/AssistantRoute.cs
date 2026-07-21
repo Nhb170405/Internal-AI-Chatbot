@@ -9,4 +9,5 @@ public static class AssistantRoute
     public const string DatasetAnalyze = "dataset_analyze";
     public const string Chart = "chart";
     public const string Unsupported = "unsupported";
+    public const string ToolCalling = "tool_calling";
 }

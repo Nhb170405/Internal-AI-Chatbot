@@ -90,11 +90,20 @@ async function readErrorMessage(response: Response) {
   if (contentType.includes("application/json")) {
     const body = (await response.json().catch(() => null)) as {
       message?: string;
+      Message?: string;
       errorMessage?: string;
+      ErrorMessage?: string;
       title?: string;
+      Title?: string;
     } | null;
 
-    return body?.message ?? body?.errorMessage ?? body?.title ?? null;
+    return body?.message
+      ?? body?.Message
+      ?? body?.errorMessage
+      ?? body?.ErrorMessage
+      ?? body?.title
+      ?? body?.Title
+      ?? null;
   }
 
   const text = await response.text().catch(() => "");

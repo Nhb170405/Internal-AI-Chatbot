@@ -27,6 +27,7 @@ using System.Security.Claims;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.HttpOverrides;
+using backend_dotnet.Modules.Assistant.Tools;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -48,7 +49,8 @@ builder.Services.AddScoped<ChatHistoryService>();
 builder.Services.AddScoped<DocumentService>();
 builder.Services.Configure<FileValidationOptions>(
     builder.Configuration.GetSection("FileValidation"));
-
+builder.Services.Configure<AssistantOptions>(
+    builder.Configuration.GetSection("Assistant"));
 builder.Services.AddScoped<FileValidationService>();
 
 builder.Services.AddScoped<DocumentIngestionService>();
@@ -63,6 +65,10 @@ builder.Services.AddScoped<ChartFileService>();
 builder.Services.AddScoped<AssistantRouter>();
 builder.Services.AddScoped<AssistantDatasetProfileHandler>();
 builder.Services.AddScoped<AssistantService>();
+// Tool-calling skeleton. Dang ky tung implementation bang IAssistantTool de
+// AssistantToolExecutor tu dong tao allow-list theo Definition.Name.
+builder.Services.AddScoped<IAssistantTool, SearchInternalDocumentsTool>();
+builder.Services.AddScoped<AssistantToolExecutor>();
 builder.Services.AddScoped<AdminAuditLogService>();
 builder.Services.AddScoped<AdminDashboardService>();
 builder.Services.AddScoped<AdminUserService>();
@@ -74,6 +80,7 @@ builder.Services.AddScoped<PromptBuilder>();
 builder.Services.AddScoped<RagService>();
 builder.Services.AddScoped<LocalFileStorageService>();
 builder.Services.AddScoped<AzureBlobFileStorageService>();
+builder.Services.AddScoped<AssistantToolCallingService>();
 builder.Services.AddScoped<IFileStorageService>(serviceProvider =>
 {
     var configuration = serviceProvider.GetRequiredService<IConfiguration>();
