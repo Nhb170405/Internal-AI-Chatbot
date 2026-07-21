@@ -40,8 +40,6 @@ def get_settings() -> AppSettings:
         raise ValueError("Missing QDRANT_COLLECTION.")
     
     qdrant_api_key = os.environ.get("QDRANT_API_KEY", "").strip()
-    if not qdrant_api_key:
-        raise ValueError("Missing QDRANT_API_KEY.")
     
     
     return AppSettings(

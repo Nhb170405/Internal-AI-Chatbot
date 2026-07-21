@@ -9,7 +9,6 @@ import { LoginPage } from "../features/auth/LoginPage";
 import { useAuth } from "../features/auth/useAuth";
 import { ChatPage } from "../features/chat/ChatPage";
 import { ChartsPage } from "../features/charts/ChartsPage";
-import { DatasetsPage } from "../features/datasets/DatasetsPage";
 import { DocumentDetailPage } from "../features/documents/DocumentDetailPage";
 import { DocumentsPage } from "../features/documents/DocumentsPage";
 
@@ -36,7 +35,6 @@ export function App() {
         <Route path="/chat" element={<ChatPage />} />
         <Route path="/documents" element={<DocumentsPage />} />
         <Route path="/documents/:documentId" element={<DocumentDetailPage />} />
-        <Route path="/datasets" element={<DatasetsPage />} />
         <Route path="/charts" element={<ChartsPage />} />
 
         {currentUser.role === "admin" && (

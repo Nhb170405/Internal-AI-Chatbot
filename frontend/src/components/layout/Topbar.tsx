@@ -12,10 +12,6 @@ const pageTitles: Record<string, { title: string; subtitle: string }> = {
     title: "Documents",
     subtitle: "Upload, lọc và xử lý tài liệu nội bộ."
   },
-  "/datasets": {
-    title: "Datasets",
-    subtitle: "Phân tích dữ liệu bảng bằng pandas."
-  },
   "/charts": {
     title: "Charts",
     subtitle: "Tạo biểu đồ từ dữ liệu bảng."

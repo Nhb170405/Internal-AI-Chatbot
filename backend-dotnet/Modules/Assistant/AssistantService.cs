@@ -213,11 +213,20 @@ public sealed class AssistantService
         return new AssistantChatResponse
         {
             Route = AssistantRoute.ToolCalling,
-            Answer = result.Answer,
-            Model = result.Model,
-            PromptTokens = result.PromptTokens,
-            CompletionTokens = result.CompletionTokens,
-            TotalTokens = result.TotalTokens
+            Answer = result.ChatResult.Answer,
+            Model = result.ChatResult.Model,
+            PromptTokens = result.ChatResult.PromptTokens,
+            CompletionTokens = result.ChatResult.CompletionTokens,
+            TotalTokens = result.ChatResult.TotalTokens,
+            Citations = result.Citations.Select(citation => new AssistantCitationResponse
+            {
+                DocumentId = citation.DocumentId,
+                ChunkId = citation.ChunkId,
+                ChunkIndex = citation.ChunkIndex,
+                Score = citation.Score,
+                Snippet = citation.Snippet,
+                PageNumber = citation.PageNumber
+            }).ToList()
         };
     }
 }
