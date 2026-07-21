@@ -49,6 +49,8 @@ class DatasetAnalysisRequest(BaseModel):
     documentId: str
     filePath: str
     fileName: str
+    fileReferenceType: str = "local_path"
+    fileReferenceValue: str = ""
     extension: str
     # Operation ban dau:
     # preview, list_columns, count, sum, average, group_by, top_n

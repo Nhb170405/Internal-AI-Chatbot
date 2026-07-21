@@ -9,6 +9,7 @@ using backend_dotnet.Infrastructure.Errors;
 using backend_dotnet.Modules.Documents;
 using backend_dotnet.Modules.Users;
 using Microsoft.EntityFrameworkCore;
+using backend_dotnet.Infrastructure.Storage;
 
 namespace backend_dotnet.Modules.Datasets;
 
@@ -18,13 +19,15 @@ public sealed class DatasetAnalysisService
     private readonly PythonDatasetClient _pythonDatasetClient;
     private readonly AuditLogService _auditLogService;
     private readonly IHttpContextAccessor _httpContextAccessor;
+    private readonly IFileStorageService _fileStorageService;
 
-    public DatasetAnalysisService(AppDbContext db, PythonDatasetClient pythonDatasetClient, AuditLogService auditLogService, IHttpContextAccessor httpContextAccessor)
+    public DatasetAnalysisService(AppDbContext db, PythonDatasetClient pythonDatasetClient, AuditLogService auditLogService, IHttpContextAccessor httpContextAccessor, IFileStorageService fileStorageService)
     {
         _db = db;
         _pythonDatasetClient = pythonDatasetClient;
         _auditLogService = auditLogService;
         _httpContextAccessor = httpContextAccessor;
+        _fileStorageService = fileStorageService;
     }
 
     public async Task<DatasetAnalysisResponse> AnalyzeAsync(Guid documentId, DatasetAnalysisRequest request, CancellationToken cancellationToken = default)
@@ -85,10 +88,14 @@ public sealed class DatasetAnalysisService
 
         var operation = NormalizeOperation(request.Operation);
 
+        var readReference = await _fileStorageService.GetReadReferenceAsync(document, cancellationToken);
+
         var pythonDatasetAnalysisRequest = new PythonDatasetAnalysisRequest
         {
             DocumentId = document.Id.ToString(),
-            FilePath = document.StoragePath,
+            FilePath = readReference.Value,
+            FileReferenceType = readReference.ReferenceType,
+            FileReferenceValue = readReference.Value,
             FileName = document.OriginalFileName,
             Extension = document.Extension,
             Operation = operation,

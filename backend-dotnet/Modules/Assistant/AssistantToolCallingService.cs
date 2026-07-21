@@ -33,7 +33,10 @@ public sealed class AssistantToolCallingService
                 Role = "system",
                 Content =
                     "You are an internal company assistant. " +
-                    "Use an available tool when the user asks about internal documents."
+                    "For exact CSV or Excel calculations, always use analyze_dataset. " +
+                    "Never calculate totals, averages, counts, groupings, previews, or top-N values " +
+                    "from document-search snippets or sample rows. " +
+                    "Use search_internal_documents only for unstructured document questions."
             },
             new()
             {

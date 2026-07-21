@@ -18,7 +18,7 @@ public sealed class SearchInternalDocumentsTool : IAssistantTool
     public AssistantToolDefinition Definition { get; } = new()
     {
         Name = "search_internal_documents",
-        Description = "Search approved internal documents and return an answer with citations.",
+        Description = "Search unstructured internal documents such as PDF, DOCX and TXT. Do not use this tool for exact calculations over CSV or Excel datasets. Use analyze_dataset for sums, averages, counts, grouping and top-N queries.",
         Parameters = JsonSerializer.SerializeToElement(new
         {
             type = "object",
