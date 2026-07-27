@@ -8,8 +8,19 @@ generation, and role-based access control.
 [AWS deployment guide](docs/deployment-aws-domainless.md) ·
 [Vietnamese operator guide](docs/huong-dan-trien-khai-aws-khong-domain.md)
 
-> The live deployment supports guest access. Administrator and employee
-> credentials are private and are never committed to this repository.
+## Demo accounts
+
+The live deployment is available for portfolio and recruitment evaluation.
+Visitors can use guest access or sign in with either public demo account:
+
+| Role | Email | Password |
+| --- | --- | --- |
+| Admin | `admin@company.com` | `Admin@123456` |
+| Employee | `employee@company.com` | `Employee@123456` |
+
+> These credentials are intentionally public and belong only to the demo
+> environment. Do not reuse these passwords for AWS, Cloudflare, GitHub, email,
+> or any other personal or production account.
 
 ## Current status
 
