@@ -311,11 +311,6 @@ if (app.Configuration.GetValue<bool>("Database:AutoMigrate"))
 
 await AdminBootstrapSeeder.SeedAsync(app.Services, app.Configuration);
 
-if (app.Environment.IsDevelopment())
-{
-    await DevelopmentDataSeeder.SeedAsync(app.Services);
-}
-
 // Cau hinh Swagger khi chay moi truong Development
 if (app.Environment.IsDevelopment())
 {

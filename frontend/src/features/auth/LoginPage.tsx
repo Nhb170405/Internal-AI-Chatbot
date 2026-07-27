@@ -7,8 +7,8 @@ import { useAuth } from "./useAuth";
 export function LoginPage() {
   const navigate = useNavigate();
   const { loginWithPassword, loginAsGuest } = useAuth();
-  const [email, setEmail] = useState("***REMOVED***");
-  const [password, setPassword] = useState("***REMOVED***");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [guestName, setGuestName] = useState("Guest");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
