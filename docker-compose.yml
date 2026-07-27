@@ -36,6 +36,7 @@ services:
       QDRANT_URL: http://qdrant:6333
       QDRANT_API_KEY: ""
       QDRANT_COLLECTION: ${QDRANT_COLLECTION:-internal_documents}
+      PYTHON_SERVICE_API_KEY: ${PYTHON_SERVICE_API_KEY:?Set PYTHON_SERVICE_API_KEY in root .env}
       TESSERACT_LANG: vie+eng
       TEMP_FILE_ROOT: /tmp/factory-chatbot
       CHART_OUTPUT_DIR: /app/generated/charts
@@ -69,6 +70,7 @@ services:
 
       PythonService__BaseUrl: http://ai-service-python:8000
       PythonService__TimeoutSeconds: 180
+      PythonService__ApiKey: ${PYTHON_SERVICE_API_KEY:?Set PYTHON_SERVICE_API_KEY in root .env}
 
       Qdrant__Url: http://qdrant:6333
       Qdrant__ApiKey: ""

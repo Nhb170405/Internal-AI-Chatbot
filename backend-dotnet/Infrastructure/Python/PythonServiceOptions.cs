@@ -7,4 +7,7 @@ public sealed class PythonServiceOptions
 
     // Timeout cho request ingestion. Milestone 5 xu ly sync nen can timeout ro rang.
     public int TimeoutSeconds { get; set; } = 60;
+
+    // Shared secret sent only by the .NET backend to the public Python service.
+    public string ApiKey { get; set; } = string.Empty;
 }

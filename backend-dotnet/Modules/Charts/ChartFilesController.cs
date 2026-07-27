@@ -16,9 +16,17 @@ public sealed class ChartFilesController : ControllerBase
     }
 
     [HttpGet("{fileName}")]
-    public IActionResult ViewChart(string fileName)
+    public async Task<IActionResult> ViewChart(
+        string fileName,
+        CancellationToken cancellationToken)
     {
-        var path = _chartFileService.GetExistingChartPath(fileName);
-        return PhysicalFile(path, "image/png");
+        if (_chartFileService.UsesLocalStorage)
+        {
+            var path = _chartFileService.GetExistingLocalPath(fileName);
+            return PhysicalFile(path, "image/png");
+        }
+
+        var url = await _chartFileService.GetReadUrlAsync(fileName, cancellationToken);
+        return Redirect(url);
     }
 }

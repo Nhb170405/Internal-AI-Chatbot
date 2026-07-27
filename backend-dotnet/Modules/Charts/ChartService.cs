@@ -148,13 +148,26 @@ public sealed class ChartService
             IpAddress = _httpContextAccessor.HttpContext?.Connection.RemoteIpAddress?.ToString()
         }, cancellationToken);
 
+        string? chartFileName = null;
+        string? chartUrl = null;
+        if (pythonResponse.Success)
+        {
+            chartFileName = await _chartFileService.SaveChartAsync(
+                pythonResponse.ChartContentBase64
+                    ?? throw new ExternalServiceApiException(
+                        "python_chart_missing_content",
+                        "Python chart service returned no image content."),
+                cancellationToken);
+            chartUrl = $"/api/charts/{Uri.EscapeDataString(chartFileName)}";
+        }
+
         return new ChartResponse
         {
             DocumentId = documentId,
             Success = pythonResponse.Success,
             ChartType = pythonResponse.ChartType,
-            ChartPath = pythonResponse.ChartPath,
-            ChartUrl = _chartFileService.CreateChartUrl(pythonResponse.ChartPath),
+            ChartPath = chartFileName,
+            ChartUrl = chartUrl,
             Data = pythonResponse.Data,
             Warnings = pythonResponse.Warnings,
             ErrorMessage = pythonResponse.ErrorMessage

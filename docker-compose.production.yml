@@ -1,0 +1,63 @@
+services:
+  ai-service-python:
+    build:
+      context: ./ai-service-python
+      dockerfile: Dockerfile
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY:?Set OPENAI_API_KEY in .env.production}
+      OPENAI_EMBEDDING_MODEL: ${OPENAI_EMBEDDING_MODEL:-text-embedding-3-small}
+      QDRANT_URL: ${QDRANT_URL:?Set QDRANT_URL in .env.production}
+      QDRANT_API_KEY: ${QDRANT_API_KEY:?Set QDRANT_API_KEY in .env.production}
+      QDRANT_COLLECTION: ${QDRANT_COLLECTION:-internal_documents}
+      PYTHON_SERVICE_API_KEY: ${PYTHON_SERVICE_API_KEY:?Set PYTHON_SERVICE_API_KEY in .env.production}
+      TESSERACT_LANG: ${TESSERACT_LANG:-vie+eng}
+      TEMP_FILE_ROOT: /tmp/factory-chatbot
+    expose:
+      - "8000"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=5)"
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+      Database__AutoMigrate: "true"
+      BootstrapAdmin__Enabled: ${BOOTSTRAP_ADMIN_ENABLED:-false}
+      BootstrapAdmin__Email: ${BOOTSTRAP_ADMIN_EMAIL:-}
+      BootstrapAdmin__Password: ${BOOTSTRAP_ADMIN_PASSWORD:-}
+      ConnectionStrings__DefaultConnection: ${SQL_CONNECTION_STRING:?Set SQL_CONNECTION_STRING in .env.production}
+      OpenAI__ApiKey: ${OPENAI_API_KEY:?Set OPENAI_API_KEY in .env.production}
+      OpenAI__BaseUrl: https://api.openai.com/v1
+      OpenAI__ChatModel: ${OPENAI_CHAT_MODEL:-gpt-4.1-mini}
+      OpenAI__EmbeddingModel: ${OPENAI_EMBEDDING_MODEL:-text-embedding-3-small}
+      PythonService__BaseUrl: http://ai-service-python:8000
+      PythonService__TimeoutSeconds: "180"
+      PythonService__ApiKey: ${PYTHON_SERVICE_API_KEY:?Set PYTHON_SERVICE_API_KEY in .env.production}
+      Qdrant__Url: ${QDRANT_URL:?Set QDRANT_URL in .env.production}
+      Qdrant__ApiKey: ${QDRANT_API_KEY:?Set QDRANT_API_KEY in .env.production}
+      Qdrant__Collection: ${QDRANT_COLLECTION:-internal_documents}
+      FileStorage__Provider: r2
+      R2Storage__ServiceUrl: ${R2_SERVICE_URL:?Set R2_SERVICE_URL in .env.production}
+      R2Storage__BucketName: ${R2_BUCKET_NAME:-internal-chatbot-files}
+      R2Storage__AccessKeyId: ${R2_ACCESS_KEY_ID:?Set R2_ACCESS_KEY_ID in .env.production}
+      R2Storage__SecretAccessKey: ${R2_SECRET_ACCESS_KEY:?Set R2_SECRET_ACCESS_KEY in .env.production}
+      R2Storage__PresignedUrlMinutes: "15"
+      ForwardedHeaders__ProtoHeaderName: CloudFront-Forwarded-Proto
+    depends_on:
+      ai-service-python:
+        condition: service_healthy
+    ports:
+      - "80:8080"
+    restart: unless-stopped

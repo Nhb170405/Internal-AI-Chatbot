@@ -80,7 +80,8 @@ builder.Services.AddScoped<DeletedDocumentPurgeJobHandler>();
 builder.Services.AddScoped<PromptBuilder>();
 builder.Services.AddScoped<RagService>();
 builder.Services.AddScoped<LocalFileStorageService>();
-builder.Services.AddScoped<AzureBlobFileStorageService>();
+builder.Services.AddSingleton<R2ObjectStorageService>();
+builder.Services.AddScoped<R2FileStorageService>();
 builder.Services.AddScoped<AssistantToolCallingService>();
 builder.Services.AddScoped<IFileStorageService>(serviceProvider =>
 {
@@ -90,7 +91,7 @@ builder.Services.AddScoped<IFileStorageService>(serviceProvider =>
     return provider switch
     {
         FileStorageProvider.Local => serviceProvider.GetRequiredService<LocalFileStorageService>(),
-        FileStorageProvider.AzureBlob => serviceProvider.GetRequiredService<AzureBlobFileStorageService>(),
+        FileStorageProvider.R2 => serviceProvider.GetRequiredService<R2FileStorageService>(),
         _ => throw new InvalidOperationException("Unsupported file storage provider.")
     };
 });
@@ -112,7 +113,9 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
     }
     else
     {
-        option.Cookie.SameSite = SameSiteMode.None;
+        // React is served by this ASP.NET Core service in production, so the
+        // authentication cookie remains first-party on the App Runner domain.
+        option.Cookie.SameSite = SameSiteMode.Lax;
         option.Cookie.SecurePolicy = CookieSecurePolicy.Always;
     }
 
@@ -137,20 +140,18 @@ var allowedOrigins = builder.Configuration
     .GetSection("Cors:AllowedOrigins")
     .Get<string[]>() ?? [];
 
-if (allowedOrigins is null || allowedOrigins.Length == 0)
-{
-    throw new InvalidOperationException("Missing Cors:AllowedOrigins configuration.");
-}
-
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("FrontendCors", policy =>
     {
-        policy
-            .WithOrigins(allowedOrigins)
-            .AllowAnyHeader()
-            .AllowAnyMethod()
-            .AllowCredentials();
+        if (allowedOrigins.Length > 0)
+        {
+            policy
+                .WithOrigins(allowedOrigins)
+                .AllowAnyHeader()
+                .AllowAnyMethod()
+                .AllowCredentials();
+        }
     });
 });
 
@@ -185,8 +186,8 @@ builder.Services.Configure<LocalFileStorageOptions>(
 builder.Services.Configure<FileStorageOptions>(
 builder.Configuration.GetSection("FileStorage"));
 
-builder.Services.Configure<AzureBlobStorageOptions>(
-    builder.Configuration.GetSection("AzureBlobStorage"));
+builder.Services.Configure<R2StorageOptions>(
+    builder.Configuration.GetSection("R2Storage"));
 
 builder.Services.Configure<DocumentRetentionOptions>(
     builder.Configuration.GetSection("DocumentRetention"));
@@ -197,11 +198,17 @@ builder.Services.Configure<PythonServiceOptions>(
 builder.Services.Configure<ChartStorageOptions>(
     builder.Configuration.GetSection("ChartStorage"));
 
-builder.Services.AddHttpClient<PythonIngestionClient>();
-builder.Services.AddHttpClient<PythonChunkingClient>();
-builder.Services.AddHttpClient<PythonVectorClient>();
-builder.Services.AddHttpClient<PythonDatasetClient>();
-builder.Services.AddHttpClient<PythonChartClient>();
+builder.Services.AddTransient<PythonServiceAuthHandler>();
+builder.Services.AddHttpClient<PythonIngestionClient>()
+    .AddHttpMessageHandler<PythonServiceAuthHandler>();
+builder.Services.AddHttpClient<PythonChunkingClient>()
+    .AddHttpMessageHandler<PythonServiceAuthHandler>();
+builder.Services.AddHttpClient<PythonVectorClient>()
+    .AddHttpMessageHandler<PythonServiceAuthHandler>();
+builder.Services.AddHttpClient<PythonDatasetClient>()
+    .AddHttpMessageHandler<PythonServiceAuthHandler>();
+builder.Services.AddHttpClient<PythonChartClient>()
+    .AddHttpMessageHandler<PythonServiceAuthHandler>();
 
 var openAIOptions = builder.Configuration.GetSection("OpenAI").Get<OpenAIOptions>();
 
@@ -278,8 +285,11 @@ builder.Services.AddRateLimiter(options =>
 
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
-    options.ForwardedHeaders =
+options.ForwardedHeaders =
         ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.ForwardedProtoHeaderName =
+        builder.Configuration["ForwardedHeaders:ProtoHeaderName"]
+        ?? "X-Forwarded-Proto";
 
     options.KnownNetworks.Clear();
     options.KnownProxies.Clear();
@@ -299,10 +309,7 @@ if (app.Configuration.GetValue<bool>("Database:AutoMigrate"))
     await db.Database.MigrateAsync();
 }
 
-if (app.Environment.IsDevelopment())
-{
-    await DevelopmentDataSeeder.SeedAsync(app.Services);
-}
+await AdminBootstrapSeeder.SeedAsync(app.Services, app.Configuration);
 
 // Cau hinh Swagger khi chay moi truong Development
 if (app.Environment.IsDevelopment())
@@ -331,12 +338,18 @@ using (var scope = app.Services.CreateScope())
 app.UseHttpsRedirection();
 
 // Middleware
+app.UseDefaultFiles();
+app.UseStaticFiles();
 app.UseRouting();
-app.UseCors("FrontendCors");
+if (allowedOrigins.Length > 0)
+{
+    app.UseCors("FrontendCors");
+}
 app.UseAuthentication();
 app.UseRateLimiter();
 app.UseAuthorization();
 app.MapControllers();
+app.MapFallbackToFile("index.html");
 
 
 app.Run();
