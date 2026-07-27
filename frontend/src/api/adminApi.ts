@@ -1,5 +1,12 @@
 import { apiRequest } from "./httpClient";
-import type { AdminAuditLogQuery, AdminAuditLogsResponse, AdminOverviewResponse, AdminUsageResponse, AdminUserItem } from "../types/admin";
+import type {
+  AdminAuditLogQuery,
+  AdminAuditLogsResponse,
+  AdminOverviewResponse,
+  AdminUsageResponse,
+  AdminUserItem,
+  CreateEmployeeUserRequest,
+} from "../types/admin";
 
 export function getAdminOverview() {
   return apiRequest<AdminOverviewResponse>("/api/admin/overview");
@@ -7,6 +14,13 @@ export function getAdminOverview() {
 
 export function getAdminUsers() {
   return apiRequest<AdminUserItem[]>("/api/admin/users");
+}
+
+export function createEmployeeUser(request: CreateEmployeeUserRequest) {
+  return apiRequest<AdminUserItem>("/api/admin/users/employees", {
+    method: "POST",
+    body: request,
+  });
 }
 
 export function getAdminUsage(query: { from?: string; to?: string } = {}) {

@@ -88,3 +88,9 @@ export type AdminUserItem = {
   createdAt: string;
   updatedAt: string;
 };
+
+export type CreateEmployeeUserRequest = {
+  email: string;
+  displayName: string;
+  password: string;
+};

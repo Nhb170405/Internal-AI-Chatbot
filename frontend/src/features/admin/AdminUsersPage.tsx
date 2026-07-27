@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { getAdminUsers } from "../../api/adminApi";
+import { createEmployeeUser, getAdminUsers } from "../../api/adminApi";
 import { Badge } from "../../components/ui/Badge";
 import { Button } from "../../components/ui/Button";
 import type { AdminUserItem } from "../../types/admin";
@@ -10,7 +10,12 @@ export function AdminUsersPage() {
   const [role, setRole] = useState("all");
   const [status, setStatus] = useState("all");
   const [isLoading, setIsLoading] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const [employeeEmail, setEmployeeEmail] = useState("");
+  const [employeeDisplayName, setEmployeeDisplayName] = useState("");
+  const [employeePassword, setEmployeePassword] = useState("");
 
   useEffect(() => {
     void loadUsers();
@@ -47,6 +52,31 @@ export function AdminUsersPage() {
     }
   }
 
+  async function handleCreateEmployee(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setIsCreating(true);
+    setError(null);
+    setMessage(null);
+
+    try {
+      const created = await createEmployeeUser({
+        email: employeeEmail.trim(),
+        displayName: employeeDisplayName.trim(),
+        password: employeePassword,
+      });
+
+      setUsers((current) => [created, ...current]);
+      setEmployeeEmail("");
+      setEmployeeDisplayName("");
+      setEmployeePassword("");
+      setMessage(`Đã tạo tài khoản employee cho ${created.email}.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Không tạo được tài khoản employee.");
+    } finally {
+      setIsCreating(false);
+    }
+  }
+
   return (
     <section className="page-stack">
       <div className="page-header">
@@ -60,6 +90,57 @@ export function AdminUsersPage() {
           Refresh
         </Button>
       </div>
+
+      <form className="panel page-stack" onSubmit={handleCreateEmployee}>
+        <div>
+          <p className="eyebrow">Admin</p>
+          <h2>Tạo tài khoản employee</h2>
+          <p className="helper-text">
+            Mật khẩu được gửi một lần khi tạo và chỉ được lưu dưới dạng hash.
+          </p>
+        </div>
+
+        <div className="form-grid">
+          <label className="compact-field">
+            <span>Email đăng nhập</span>
+            <input
+              type="email"
+              value={employeeEmail}
+              onChange={(event) => setEmployeeEmail(event.target.value)}
+              autoComplete="off"
+              required
+            />
+          </label>
+
+          <label className="compact-field">
+            <span>Tên hiển thị</span>
+            <input
+              value={employeeDisplayName}
+              onChange={(event) => setEmployeeDisplayName(event.target.value)}
+              autoComplete="off"
+              placeholder="Để trống để dùng phần tên trong email"
+            />
+          </label>
+
+          <label className="compact-field">
+            <span>Mật khẩu tạm thời</span>
+            <input
+              type="password"
+              value={employeePassword}
+              onChange={(event) => setEmployeePassword(event.target.value)}
+              autoComplete="new-password"
+              minLength={8}
+              required
+            />
+          </label>
+        </div>
+
+        <div>
+          <Button type="submit" disabled={isCreating}>
+            {isCreating ? "Đang tạo..." : "Tạo employee"}
+          </Button>
+        </div>
+      </form>
 
       <div className="document-filter-panel users-filter-panel">
         <label className="compact-field search-field">
@@ -87,6 +168,7 @@ export function AdminUsersPage() {
       </div>
 
       {error ? <div className="alert alert-danger">{error}</div> : null}
+      {message ? <div className="alert alert-success">{message}</div> : null}
 
       <div className="metric-grid">
         <MetricCard label="Total users" value={users.length} />
