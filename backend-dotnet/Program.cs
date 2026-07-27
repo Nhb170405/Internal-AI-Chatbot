@@ -309,6 +309,8 @@ if (app.Configuration.GetValue<bool>("Database:AutoMigrate"))
     await db.Database.MigrateAsync();
 }
 
+await AdminBootstrapSeeder.SeedAsync(app.Services, app.Configuration);
+
 if (app.Environment.IsDevelopment())
 {
     await DevelopmentDataSeeder.SeedAsync(app.Services);

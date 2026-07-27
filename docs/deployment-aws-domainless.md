@@ -207,6 +207,23 @@ docker compose --env-file .env.production \
 Do not run `docker compose config` without `--quiet` while sharing the terminal,
 because the expanded output contains secrets.
 
+### Create the first production admin
+
+Demo users are intentionally seeded only in Development. For the first
+Production start, add these values to `.env.production`:
+
+```dotenv
+BOOTSTRAP_ADMIN_ENABLED=true
+BOOTSTRAP_ADMIN_EMAIL=your-admin-email@example.com
+BOOTSTRAP_ADMIN_PASSWORD=<a-unique-password-with-at-least-12-characters>
+```
+
+The bootstrapper creates an admin only when the database does not already
+contain one. After the first successful admin login, set
+`BOOTSTRAP_ADMIN_ENABLED=false`, remove the email and password lines, and
+recreate the web service. This removes the plaintext bootstrap password from
+the container environment.
+
 ## 9. Build and start
 
 From the repository root:

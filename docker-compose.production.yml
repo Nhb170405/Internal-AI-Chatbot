@@ -34,6 +34,9 @@ services:
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://+:8080
       Database__AutoMigrate: "true"
+      BootstrapAdmin__Enabled: ${BOOTSTRAP_ADMIN_ENABLED:-false}
+      BootstrapAdmin__Email: ${BOOTSTRAP_ADMIN_EMAIL:-}
+      BootstrapAdmin__Password: ${BOOTSTRAP_ADMIN_PASSWORD:-}
       ConnectionStrings__DefaultConnection: ${SQL_CONNECTION_STRING:?Set SQL_CONNECTION_STRING in .env.production}
       OpenAI__ApiKey: ${OPENAI_API_KEY:?Set OPENAI_API_KEY in .env.production}
       OpenAI__BaseUrl: https://api.openai.com/v1
