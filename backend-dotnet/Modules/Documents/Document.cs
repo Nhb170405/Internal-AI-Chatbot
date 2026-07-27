@@ -13,12 +13,12 @@ public sealed class Document
 
 
 
-    // Noi file duoc luu: local, azure_blob, ...
+    // Noi file duoc luu: local hoac r2.
     public string StorageProvider { get; set; } = "local";
 
     // Dinh danh on dinh cua file trong storage.
     // Local: stored file name.
-    // Azure Blob: blob name.
+    // R2: object key.
     public string StorageKey { get; set; } = string.Empty;
 
     // Duong dan noi bo de backend tim file. Khong nen expose tuy tien ra frontend.

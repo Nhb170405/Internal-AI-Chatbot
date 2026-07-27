@@ -1,7 +1,6 @@
 from app.charts.chart_models import ChartRenderRequest, ChartRenderResponse
-from pathlib import Path
-
-from uuid import uuid4
+import base64
+from io import BytesIO
 import matplotlib.pyplot as plt
 
 def render_chart(request: ChartRenderRequest) -> ChartRenderResponse:
@@ -59,12 +58,13 @@ def render_chart(request: ChartRenderRequest) -> ChartRenderResponse:
 
         plt.tight_layout()
 
-        chart_path = _save_chart_file()
+        chart_content_base64 = _render_chart_base64()
         
         return ChartRenderResponse(
             success=True,
             chartType=chart_type,
-            chartPath=chart_path,
+            chartPath=None,
+            chartContentBase64=chart_content_base64,
             data=request.data,
             warnings=[],
             errorMessage=None
@@ -75,6 +75,7 @@ def render_chart(request: ChartRenderRequest) -> ChartRenderResponse:
             success=False,
             chartType=request.chartType,
             chartPath=None,
+            chartContentBase64=None,
             data=request.data,
             warnings=[],
             errorMessage=str(e)
@@ -152,21 +153,10 @@ def _extract_xy_values(data, x_field, y_field):
 
     return x_values, y_values
 
-def _ensure_chart_output_dir() -> Path:
-    project_root = Path(__file__).resolve().parents[2]
-    output_dir = project_root / "generated" / "charts"
-    output_dir.mkdir(parents=True, exist_ok=True)
-    return output_dir
-
-def _save_chart_file() -> str:
-    output_dir = _ensure_chart_output_dir()
-
-    file_name = f"chart_{uuid4().hex}.png"
-    file_path = output_dir / file_name
-
-    plt.savefig(file_path, format="png", dpi=150)
-
-    return str(file_path)
+def _render_chart_base64() -> str:
+    buffer = BytesIO()
+    plt.savefig(buffer, format="png", dpi=150)
+    return base64.b64encode(buffer.getvalue()).decode("ascii")
 
 def _find_field(keys: list[str], requested_field: str | None):
     if requested_field is None or requested_field.strip() == "":

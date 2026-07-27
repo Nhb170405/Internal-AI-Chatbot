@@ -1,50 +1,88 @@
 using backend_dotnet.Infrastructure.Errors;
+using backend_dotnet.Infrastructure.Storage;
 using Microsoft.Extensions.Options;
 
 namespace backend_dotnet.Modules.Charts;
 
 public sealed class ChartFileService
 {
-    private static readonly HashSet<string> AllowedExtensions = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ".png"
-    };
+    private const int MaxChartBytes = 10 * 1024 * 1024;
+    private readonly IServiceProvider _services;
+    private readonly string _provider;
+    private readonly string _localRootPath;
 
-    private readonly string _rootPath;
-
-    public ChartFileService(IOptions<ChartStorageOptions> options, IWebHostEnvironment environment)
+    public ChartFileService(
+        IServiceProvider services,
+        IConfiguration configuration,
+        IOptions<ChartStorageOptions> options,
+        IWebHostEnvironment environment)
     {
+        _services = services;
+        _provider = configuration.GetValue<string>("FileStorage:Provider")?
+            .Trim()
+            .ToLowerInvariant() ?? FileStorageProvider.Local;
+
         var configuredRoot = options.Value.RootPath;
-        _rootPath = Path.GetFullPath(Path.IsPathRooted(configuredRoot)
+        _localRootPath = Path.GetFullPath(Path.IsPathRooted(configuredRoot)
             ? configuredRoot
             : Path.Combine(environment.ContentRootPath, configuredRoot));
     }
 
-    public string? CreateChartUrl(string? chartPath)
+    public bool UsesLocalStorage => _provider == FileStorageProvider.Local;
+
+    public async Task<string> SaveChartAsync(
+        string chartContentBase64,
+        CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(chartPath))
+        if (string.IsNullOrWhiteSpace(chartContentBase64))
         {
-            return null;
+            throw new ValidationApiException(
+                "invalid_chart_content",
+                "Python chart response did not contain image data.");
         }
 
-        var fileName = Path.GetFileName(chartPath);
-        if (!IsAllowedFileName(fileName))
+        byte[] content;
+        try
         {
-            return null;
+            content = Convert.FromBase64String(chartContentBase64);
+        }
+        catch (FormatException)
+        {
+            throw new ValidationApiException(
+                "invalid_chart_content",
+                "Python chart response contained invalid image data.");
         }
 
-        return $"/api/charts/{Uri.EscapeDataString(fileName)}";
+        if (content.Length == 0 || content.Length > MaxChartBytes)
+        {
+            throw new ValidationApiException(
+                "invalid_chart_content",
+                "Generated chart size is invalid.");
+        }
+
+        var fileName = $"chart_{Guid.NewGuid():N}.png";
+        if (UsesLocalStorage)
+        {
+            Directory.CreateDirectory(_localRootPath);
+            var fullPath = Path.Combine(_localRootPath, fileName);
+            await File.WriteAllBytesAsync(fullPath, content, cancellationToken);
+        }
+        else
+        {
+            EnsureR2Provider();
+            var key = $"charts/{fileName}";
+            await using var stream = new MemoryStream(content, writable: false);
+            await GetR2Storage().PutAsync(key, stream, "image/png", cancellationToken);
+        }
+
+        return fileName;
     }
 
-    public string GetExistingChartPath(string fileName)
+    public string GetExistingLocalPath(string fileName)
     {
-        if (!IsAllowedFileName(fileName))
-        {
-            throw new ValidationApiException("invalid_chart_file", "Chart file name is not valid.");
-        }
-
-        var fullPath = Path.GetFullPath(Path.Combine(_rootPath, fileName));
-        if (!fullPath.StartsWith(_rootPath, StringComparison.OrdinalIgnoreCase))
+        ValidateFileName(fileName);
+        var fullPath = Path.GetFullPath(Path.Combine(_localRootPath, fileName));
+        if (!fullPath.StartsWith(_localRootPath, StringComparison.OrdinalIgnoreCase))
         {
             throw new ValidationApiException("invalid_chart_file", "Chart file path is not valid.");
         }
@@ -57,18 +95,44 @@ public sealed class ChartFileService
         return fullPath;
     }
 
-    private static bool IsAllowedFileName(string? fileName)
+    public async Task<string> GetReadUrlAsync(
+        string fileName,
+        CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(fileName))
+        ValidateFileName(fileName);
+        EnsureR2Provider();
+
+        var key = $"charts/{fileName}";
+        var storage = GetR2Storage();
+        if (!await storage.ExistsAsync(key, cancellationToken))
         {
-            return false;
+            throw new NotFoundApiException("chart_not_found", "Chart file not found.");
         }
 
-        if (fileName != Path.GetFileName(fileName))
-        {
-            return false;
-        }
-
-        return AllowedExtensions.Contains(Path.GetExtension(fileName));
+        return storage.CreatePresignedReadUrl(key);
     }
+
+    private R2ObjectStorageService GetR2Storage() =>
+        _services.GetRequiredService<R2ObjectStorageService>();
+
+    private void EnsureR2Provider()
+    {
+        if (_provider != FileStorageProvider.R2)
+        {
+            throw new InvalidOperationException($"Unsupported chart storage provider '{_provider}'.");
+        }
+    }
+
+    private static void ValidateFileName(string fileName)
+    {
+        if (!IsAllowedFileName(fileName))
+        {
+            throw new ValidationApiException("invalid_chart_file", "Chart file name is not valid.");
+        }
+    }
+
+    private static bool IsAllowedFileName(string fileName) =>
+        fileName == Path.GetFileName(fileName) &&
+        fileName.StartsWith("chart_", StringComparison.Ordinal) &&
+        string.Equals(Path.GetExtension(fileName), ".png", StringComparison.OrdinalIgnoreCase);
 }

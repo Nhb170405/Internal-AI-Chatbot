@@ -18,6 +18,7 @@ class ChartRenderResponse(BaseModel):
     success: bool
     chartType: str
     chartPath: str | None = None
+    chartContentBase64: str | None = None
     data: list[dict[str, Any]] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
     errorMessage: str | None = None

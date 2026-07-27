@@ -10,6 +10,8 @@ public sealed class PythonChartRenderResponse
 
     public string? ChartPath { get; set; }
 
+    public string? ChartContentBase64 { get; set; }
+
     public JsonElement? Data { get; set; }
 
     public List<string> Warnings { get; set; } = [];

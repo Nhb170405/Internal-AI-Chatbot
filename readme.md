@@ -8,9 +8,10 @@
 [![React](https://img.shields.io/badge/React-TypeScript-61DAFB)](https://react.dev/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-Python-009688)](https://fastapi.tiangolo.com/)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED)](https://www.docker.com/)
-[![Azure](https://img.shields.io/badge/Deployed%20on-Azure-0078D4)](https://azure.microsoft.com/)
+[![AWS](https://img.shields.io/badge/Deployment-AWS%20EC2-FF9900)](https://aws.amazon.com/ec2/)
+[![R2](https://img.shields.io/badge/Storage-Cloudflare%20R2-F38020)](https://www.cloudflare.com/developer-platform/products/r2/)
 
-**Live Demo:** https://purple-coast-0345b9800.7.azurestaticapps.net/login  
+**Live Demo:** pending AWS/CloudFront deployment
 **Repository:** https://github.com/Nhb170405/Internal-AI-Chatbot
 
 </div>
@@ -42,7 +43,7 @@ Instead of treating every request as a generic prompt sent directly to an LLM, t
 - Role-based access control for internal data
 - Background jobs for long-running document processing
 - Token-aware request routing to reduce unnecessary LLM usage
-- Cloud deployment across multiple Azure services
+- Domainless AWS deployment through CloudFront, EC2, and RDS
 
 The project was built as an end-to-end learning and portfolio project. It covers the complete path from frontend interaction and backend business logic to AI orchestration, data storage, containerization, CI/CD, and cloud deployment.
 
@@ -140,13 +141,12 @@ This project turns those files into a permission-aware AI assistant capable of a
 
 ### Cloud Deployment
 
-- React frontend on Azure Static Web Apps
-- ASP.NET Core backend on Azure Container Apps
-- Python FastAPI service in a separate container
-- SQL Server / Azure SQL for relational data
-- Azure Blob Storage-ready file storage
+- React production build served by ASP.NET Core on the same origin
+- ASP.NET Core and Python FastAPI containers on one EC2 instance
+- SQL Server Express on private Amazon RDS
+- Private Cloudflare R2 object storage for documents and charts
 - Qdrant for vector search
-- GitHub Actions for frontend deployment
+- CloudFront default HTTPS URL; no purchased domain required
 - Docker Compose for local development
 
 ---
@@ -175,9 +175,9 @@ flowchart LR
     end
 
     subgraph Data
-        Sql["SQL Server / Azure SQL"]
+        Sql["SQL Server / Amazon RDS"]
         Qdrant["Qdrant Vector Database"]
-        Blob["Local Storage / Azure Blob"]
+        Blob["Local Storage / Cloudflare R2"]
     end
 
     OpenAI["OpenAI API"]
@@ -314,16 +314,16 @@ Spreadsheet questions are delegated to deterministic Pandas operations instead o
 | Frontend        | React, TypeScript, Vite, React Router            |
 | Backend         | ASP.NET Core Web API, C#, Entity Framework Core  |
 | Authentication  | ASP.NET Core Cookie Authentication, Claims, RBAC |
-| Database        | SQL Server / Azure SQL                           |
+| Database        | SQL Server / Amazon RDS                          |
 | AI Service      | Python, FastAPI                                  |
 | AI Provider     | OpenAI API                                       |
 | Vector Search   | Qdrant                                           |
 | Background Jobs | Hangfire                                         |
 | File Processing | OCR, PDF/DOCX/XLSX/CSV/TXT parsing               |
-| Storage         | Local volumes, Azure Blob Storage-ready          |
+| Storage         | Local development, private Cloudflare R2         |
 | Containers      | Docker, Docker Compose                           |
-| Cloud           | Azure Static Web Apps, Azure Container Apps      |
-| CI/CD           | GitHub Actions                                   |
+| Cloud           | AWS EC2, Amazon RDS, Amazon CloudFront           |
+| Deployment      | Docker Compose                                   |
 
 ---
 
@@ -568,11 +568,15 @@ OpenAI__BaseUrl
 OpenAI__ChatModel
 PythonService__BaseUrl
 PythonService__TimeoutSeconds
+PythonService__ApiKey
 Qdrant__Url
 Qdrant__ApiKey
 Qdrant__Collection
 FileStorage__Provider
-AzureBlobStorage__ConnectionString
+R2Storage__ServiceUrl
+R2Storage__BucketName
+R2Storage__AccessKeyId
+R2Storage__SecretAccessKey
 Cors__AllowedOrigins__0
 Database__AutoMigrate
 Assistant__ToolCallingEnabled
@@ -584,24 +588,25 @@ Assistant__ToolCallingEnabled
 VITE_API_BASE_URL
 ```
 
-Vite injects frontend environment variables at build time. Production values must therefore be configured in the GitHub Actions or Azure Static Web Apps build environment.
+Production leaves `VITE_API_BASE_URL` unset so React calls the API on the same CloudFront origin.
 
 ---
 
-## Azure Deployment
+## AWS Deployment
 
-The current public demo uses:
+The domainless production design uses:
 
-| Component           | Azure service                     |
-| ------------------- | --------------------------------- |
-| Frontend            | Azure Static Web Apps             |
-| Backend             | Azure Container Apps              |
-| Python service      | Azure Container Apps              |
-| Relational database | Azure SQL / SQL Server deployment |
-| File storage        | Azure Blob Storage-ready          |
-| CI/CD               | GitHub Actions                    |
+| Component           | Service                                      |
+| ------------------- | -------------------------------------------- |
+| Public HTTPS URL    | Amazon CloudFront default `cloudfront.net`   |
+| Frontend + backend  | ASP.NET Core container on Amazon EC2         |
+| Python service      | Private Docker network on the same EC2       |
+| Relational database | Private Amazon RDS for SQL Server Express     |
+| File storage        | Private Cloudflare R2 bucket                  |
+| Vector database     | Qdrant Cloud                                  |
 
-The Python service is designed as an internal backend dependency and is not called directly from the browser.
+Vietnamese operator guide: `docs/huong-dan-trien-khai-aws-khong-domain.md`.
+English reference: `docs/deployment-aws-domainless.md`.
 
 Production secrets are supplied through cloud environment variables and are excluded from Git.
 
@@ -620,7 +625,7 @@ Suggested screenshots:
 5. Spreadsheet analysis
 6. Generated chart
 7. Admin user management
-8. Azure deployment overview
+8. AWS deployment overview
 
 Example Markdown after adding an image:
 
@@ -677,7 +682,7 @@ Implemented:
 - [x] Audit logging
 - [x] Admin employee account API
 - [x] Docker Compose environment
-- [x] Azure frontend and backend deployment
+- [x] Domainless AWS deployment configuration
 
 ---
 
@@ -738,8 +743,8 @@ The most important lesson was learning how to turn an unclear idea into a workin
 - Semantic top-K retrieval may omit items when a complete list is spread across many chunks.
 - Citation page numbers depend on available parser/chunk metadata and may be unavailable.
 - CSV/XLSX analysis currently supports a fixed operation set and does not yet support arbitrary filters, joins, or cross-file analysis.
-- Cross-site authentication cookies may be blocked by strict private-browsing or third-party-cookie settings because the demo frontend and API use different Azure domains.
-- Azure services may incur costs after free quotas or credits are exhausted.
+- Production serves React and the API on one CloudFront origin to keep authentication cookies first-party.
+- AWS, R2, OpenAI, and Qdrant usage may incur costs after their credits or free allowances are exhausted.
 - The project should undergo a formal security review before production use.
 
 ---
@@ -750,7 +755,7 @@ The most important lesson was learning how to turn an unclear idea into a workin
 
 - GitHub: https://github.com/Nhb170405
 - Project: https://github.com/Nhb170405/Internal-AI-Chatbot
-- Live Demo: https://purple-coast-0345b9800.7.azurestaticapps.net/login
+- Live Demo: pending AWS/CloudFront deployment
 
 ---
 

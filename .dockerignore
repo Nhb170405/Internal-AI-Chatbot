@@ -1,0 +1,14 @@
+.git
+.github
+.agents
+.codex
+.env
+**/.env
+**/bin
+**/obj
+**/node_modules
+**/__pycache__
+**/.venv
+**/generated
+.tmpout
+storage

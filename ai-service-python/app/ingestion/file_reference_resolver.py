@@ -16,7 +16,7 @@ def resolve_file_reference(file_reference_type: str,file_reference_value: str,le
     # 1. Neu file_reference_type rong hoac local_path:
     #    - dung file_reference_value neu co
     #    - neu khong co thi fallback legacy_file_path
-    # 2. Neu file_reference_type la sas_url:
+    # 2. Neu file_reference_type la presigned_url:
     #    - download URL ve file tam
     #    - return path file tam
     # 3. Neu type khong ho tro thi raise ValueError.
@@ -30,26 +30,26 @@ def resolve_file_reference(file_reference_type: str,file_reference_value: str,le
             should_cleanup=False,
         )
 
-    if normalized_type == "sas_url":
-        return download_sas_url_to_temp_file(
-            sas_url=file_reference_value,
+    if normalized_type == "presigned_url":
+        return download_presigned_url_to_temp_file(
+            presigned_url=file_reference_value,
             extension=extension,
         )
 
     raise ValueError(f"Unsupported file reference type: {normalized_type}")
 
 
-def download_sas_url_to_temp_file(sas_url: str, extension: str) -> ResolvedFileReference:
+def download_presigned_url_to_temp_file(presigned_url: str, extension: str) -> ResolvedFileReference:
     # Muc tieu:
-    # 1. Check sas_url khong rong.
+    # 1. Check presigned_url khong rong.
     # 2. Tao extension an toan, vi du ".pdf".
     # 3. Tao temp file bang NamedTemporaryFile(delete=False, suffix=extension).
-    # 4. Dung httpx stream/download noi dung tu sas_url.
+    # 4. Dung httpx stream/download noi dung tu presigned_url.
     # 5. Ghi bytes vao temp file.
     # 6. Return ResolvedFileReference(file_path=temp_path, should_cleanup=True).
 
-    if not sas_url or not sas_url.strip():
-        raise ValueError("SAS URL is missing.")
+    if not presigned_url or not presigned_url.strip():
+        raise ValueError("Presigned URL is missing.")
 
     normalized_extension = extension.strip().lower()
     if not normalized_extension.startswith("."):
@@ -58,7 +58,7 @@ def download_sas_url_to_temp_file(sas_url: str, extension: str) -> ResolvedFileR
     with NamedTemporaryFile(delete=False, suffix=normalized_extension) as temp_file:
         temp_path = temp_file.name
 
-        with httpx.stream("GET", sas_url, timeout=60.0) as response:
+        with httpx.stream("GET", presigned_url, timeout=60.0) as response:
             response.raise_for_status()
 
             for chunk in response.iter_bytes():

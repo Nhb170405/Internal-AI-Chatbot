@@ -1,4 +1,5 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:5055";
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
+  ?? (import.meta.env.DEV ? "http://localhost:5055" : "");
 
 export function buildApiUrl(path: string) {
   if (path.startsWith("http://") || path.startsWith("https://")) {

@@ -15,7 +15,7 @@ from app.ingestion.file_reference_resolver import (
 def analyze_dataset(request: DatasetAnalysisRequest) -> DatasetAnalysisResponse:
     """Run deterministic analysis over an entire CSV/XLS/XLSX dataset.
 
-    The backend may provide either a local path or a short-lived Azure Blob SAS
+    The backend may provide either a local path or a short-lived R2 presigned
     URL. The shared resolver converts both forms to a local path that pandas can
     read. Any temporary download is always removed in the finally block.
     """
